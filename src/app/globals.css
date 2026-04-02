@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-white text-gray-900;
+  }
+}
+
+@layer components {
+  .container {
+    @apply mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  .gradient-subtle {
+    @apply bg-gradient-to-br from-tenir-50 to-white;
+  }
+
+  .gradient-auth {
+    @apply bg-gradient-to-br from-tenir-50 via-white to-accent-50;
+  }
+}
