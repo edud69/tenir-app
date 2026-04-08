@@ -28,7 +28,10 @@
     "actions": "Actions",
     "noResults": "Aucun résultat",
     "error": "Une erreur est survenue",
-    "success": "Succès"
+    "success": "Succès",
+    "type": "Type",
+    "vendor": "Fournisseur",
+    "noData": "Aucune donnée disponible"
   },
   "nav": {
     "dashboard": "Tableau de bord",
@@ -61,7 +64,7 @@
   },
   "dashboard": {
     "welcome": "Bienvenue, {name}",
-    "overview": "Aperçu",
+    "overview": "Tableau de bord",
     "recentTransactions": "Transactions récentes",
     "quickActions": "Actions rapides",
     "uploadReceipt": "Téléverser un reçu",
@@ -73,7 +76,16 @@
     "netIncome": "Revenu net",
     "estimatedTax": "Impôt estimé",
     "fiscalYear": "Exercice financier {year}",
-    "period": "Période"
+    "period": "Période",
+    "monthlyOverview": "Aperçu mensuel",
+    "quickStats": "Statistiques",
+    "avgMonthly": "Moy. dépenses mensuelles",
+    "ytdMargin": "Marge cumul annuel",
+    "noTransactions": "Aucune transaction. Ajoutez votre première transaction dans la section Dépenses.",
+    "noChartData": "Ajoutez des transactions pour afficher le graphique",
+    "overviewSubtitle": "Voici un résumé de votre activité financière pour cet exercice.",
+    "description": "Description",
+    "taxRateEstimate": "Taux d'imposition estimé"
   },
   "receipts": {
     "title": "Reçus",
@@ -92,7 +104,9 @@
     "scanEmail": "Balayer les courriels",
     "pending": "En attente",
     "verified": "Vérifié",
-    "rejected": "Rejeté"
+    "rejected": "Rejeté",
+    "noReceipts": "Aucun reçu. Téléversez votre premier reçu ci-dessus.",
+    "uploadCount": "{count} fichier(s) téléversé(s)"
   },
   "expenses": {
     "title": "Dépenses et revenus",
@@ -120,7 +134,13 @@
     "oneTime": "Ponctuel",
     "monthly": "Mensuel",
     "quarterly": "Trimestriel",
-    "annually": "Annuel"
+    "annually": "Annuel",
+    "noTransactions": "Aucune transaction. Ajoutez votre première transaction.",
+    "allTypes": "Tous les types",
+    "allCategories": "Toutes les catégories",
+    "startDate": "Date de début",
+    "endDate": "Date de fin",
+    "frequency": "Fréquence"
   },
   "investments": {
     "title": "Placements",
@@ -130,13 +150,29 @@
     "shares": "Parts",
     "purchasePrice": "Prix d'achat",
     "currentValue": "Valeur actuelle",
-    "gainLoss": "Gain/Perte",
+    "gainLoss": "Gain / Perte",
     "dividendIncome": "Revenus de dividendes",
     "acb": "Prix de base rajusté (PBR)",
     "bookValue": "Valeur comptable",
     "marketValue": "Valeur marchande",
     "unrealizedGain": "Gain non réalisé",
-    "realizedGain": "Gain réalisé"
+    "realizedGain": "Gain réalisé",
+    "noInvestments": "Aucun placement. Ajoutez votre premier titre.",
+    "noDividends": "Aucun dividende enregistré.",
+    "purchaseDate": "Date d'achat",
+    "currentPrice": "Prix actuel",
+    "currency": "Devise",
+    "accountType": "Type de compte",
+    "notes": "Notes",
+    "investmentType": "Type",
+    "addDividend": "Ajouter un dividende",
+    "dividendType": "Type de dividende",
+    "eligible": "Déterminé",
+    "nonEligible": "Non déterminé",
+    "capital": "En capital",
+    "foreign": "Étranger",
+    "payer": "Payeur",
+    "withholdingTax": "Retenue d'impôt"
   },
   "taxes": {
     "title": "Planification fiscale",
@@ -177,7 +213,12 @@
     "nextInstallment": "Prochain acompte",
     "dueDate": "Date d'échéance",
     "taxYear": "Année d'imposition {year}",
-    "brackets": "Paliers d'imposition"
+    "brackets": "Paliers d'imposition",
+    "calculate": "Calculer les impôts",
+    "noProfile": "Aucun profil fiscal pour cette année. Saisissez vos revenus et cliquez sur Calculer.",
+    "quarter": "T{n}",
+    "method": "Méthode",
+    "savingsNote": "c. salaire"
   },
   "forms": {
     "title": "Formulaires gouvernementaux",
@@ -185,7 +226,7 @@
     "download": "Télécharger",
     "submit": "Soumettre en ligne",
     "preview": "Aperçu",
-    "generatingForm": "Génération du formulaire...",
+    "generatingForm": "Génération en cours...",
     "selectFormType": "Sélectionner le type de formulaire",
     "t2": "T2 — Déclaration de revenus des sociétés",
     "co17": "CO-17 — Déclaration de revenus des sociétés (Québec)",
@@ -203,7 +244,20 @@
     "fillAutomatically": "Remplir automatiquement",
     "submittedOn": "Soumis le",
     "noFormsGenerated": "Aucun formulaire généré",
-    "startGenerating": "Générez un formulaire pour commencer"
+    "startGenerating": "Générez un formulaire pour commencer",
+    "formsOverview": "Aperçu des formulaires",
+    "formsDescription": "Générez, prévisualisez et soumettez vos formulaires fiscaux gouvernementaux",
+    "submissionHistory": "Historique de soumission",
+    "taxYear": "Année d'imposition",
+    "choosePlaceholder": "Choisir un formulaire...",
+    "chooseYearPlaceholder": "Choisir une année...",
+    "generateInfo": "Le formulaire sera généré avec vos informations d'entreprise. Vous pourrez ensuite le prévisualiser et le soumettre.",
+    "section": "Section",
+    "field": "Champ",
+    "value": "Valeur",
+    "deleteConfirm": "Êtes-vous sûr de vouloir supprimer ce formulaire?",
+    "generatedOn": "Généré le",
+    "noHistory": "Aucun historique de soumission."
   },
   "assistant": {
     "title": "Assistant IA",
@@ -215,7 +269,7 @@
       "installments": "Dois-je payer des acomptes provisionnels?"
     },
     "thinking": "Réflexion en cours...",
-    "disclaimer": "L'assistant IA fournit des informations générales. Consultez un comptable professionnel agréé (CPA) pour des conseils personnalisés."
+    "disclaimer": "L'assistant IA fournit des informations générales. Consultez un CPA pour des conseils personnalisés."
   },
   "settings": {
     "title": "Paramètres",
@@ -228,7 +282,7 @@
     "companyName": "Nom de la société",
     "neq": "Numéro d'entreprise du Québec (NEQ)",
     "bn": "Numéro d'entreprise fédéral (NE)",
-    "fiscalYearEnd": "Fin d'exercice financier",
+    "fiscalYearEnd": "Fin d'exercice (MM-JJ)",
     "incorporationDate": "Date de constitution",
     "province": "Province",
     "corporationType": "Type de société",

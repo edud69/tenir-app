@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Logo } from '@/components/ui/logo';
 
 interface NavItem {
   href: string;
@@ -108,12 +109,9 @@ export default function Sidebar({ user, locale }: SidebarProps) {
   const sidebarContent = (
     <>
       {/* Logo */}
-      <div className="p-6 border-b border-gray-200">
-        <Link href={`/${locale}/dashboard`} className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-tenir-600 rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-sm">T</span>
-          </div>
-          <span className="font-bold text-lg text-gray-900">tenir.app</span>
+      <div className="p-5 border-b border-gray-100">
+        <Link href={`/${locale}/dashboard`}>
+          <Logo size={34} variant="full" />
         </Link>
       </div>
 

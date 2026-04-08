@@ -28,7 +28,10 @@
     "actions": "Actions",
     "noResults": "No results",
     "error": "An error occurred",
-    "success": "Success"
+    "success": "Success",
+    "type": "Type",
+    "vendor": "Vendor",
+    "noData": "No data available"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -61,7 +64,7 @@
   },
   "dashboard": {
     "welcome": "Welcome, {name}",
-    "overview": "Overview",
+    "overview": "Dashboard",
     "recentTransactions": "Recent transactions",
     "quickActions": "Quick actions",
     "uploadReceipt": "Upload receipt",
@@ -73,7 +76,16 @@
     "netIncome": "Net income",
     "estimatedTax": "Estimated tax",
     "fiscalYear": "Fiscal year {year}",
-    "period": "Period"
+    "period": "Period",
+    "monthlyOverview": "Monthly overview",
+    "quickStats": "Quick stats",
+    "avgMonthly": "Avg. monthly expenses",
+    "ytdMargin": "YTD margin",
+    "noTransactions": "No transactions yet. Add your first transaction in the Expenses section.",
+    "noChartData": "Add transactions to see your chart",
+    "overviewSubtitle": "Here's a summary of your financial activity for this fiscal year.",
+    "description": "Description",
+    "taxRateEstimate": "Est. tax rate"
   },
   "receipts": {
     "title": "Receipts",
@@ -92,7 +104,9 @@
     "scanEmail": "Scan emails",
     "pending": "Pending",
     "verified": "Verified",
-    "rejected": "Rejected"
+    "rejected": "Rejected",
+    "noReceipts": "No receipts yet. Upload your first receipt above.",
+    "uploadCount": "{count} file(s) uploaded"
   },
   "expenses": {
     "title": "Expenses & Revenue",
@@ -120,7 +134,13 @@
     "oneTime": "One-time",
     "monthly": "Monthly",
     "quarterly": "Quarterly",
-    "annually": "Annual"
+    "annually": "Annual",
+    "noTransactions": "No transactions yet. Add your first transaction.",
+    "allTypes": "All types",
+    "allCategories": "All categories",
+    "startDate": "Start date",
+    "endDate": "End date",
+    "frequency": "Frequency"
   },
   "investments": {
     "title": "Investments",
@@ -130,13 +150,29 @@
     "shares": "Shares",
     "purchasePrice": "Purchase price",
     "currentValue": "Current value",
-    "gainLoss": "Gain/Loss",
+    "gainLoss": "Gain / Loss",
     "dividendIncome": "Dividend income",
     "acb": "Adjusted cost base (ACB)",
     "bookValue": "Book value",
     "marketValue": "Market value",
     "unrealizedGain": "Unrealized gain",
-    "realizedGain": "Realized gain"
+    "realizedGain": "Realized gain",
+    "noInvestments": "No investments yet. Add your first holding.",
+    "noDividends": "No dividend records yet.",
+    "purchaseDate": "Purchase date",
+    "currentPrice": "Current price",
+    "currency": "Currency",
+    "accountType": "Account type",
+    "notes": "Notes",
+    "investmentType": "Type",
+    "addDividend": "Add dividend",
+    "dividendType": "Dividend type",
+    "eligible": "Eligible",
+    "nonEligible": "Non-eligible",
+    "capital": "Capital",
+    "foreign": "Foreign",
+    "payer": "Payer",
+    "withholdingTax": "Withholding tax"
   },
   "taxes": {
     "title": "Tax Planning",
@@ -177,15 +213,20 @@
     "nextInstallment": "Next installment",
     "dueDate": "Due date",
     "taxYear": "Tax year {year}",
-    "brackets": "Tax brackets"
+    "brackets": "Tax brackets",
+    "calculate": "Calculate taxes",
+    "noProfile": "No tax profile for this year. Enter your income details and click Calculate.",
+    "quarter": "Q{n}",
+    "method": "Method",
+    "savingsNote": "vs. salary"
   },
   "forms": {
-    "title": "Government forms",
+    "title": "Government Forms",
     "generate": "Generate",
     "download": "Download",
     "submit": "Submit online",
     "preview": "Preview",
-    "generatingForm": "Generating form...",
+    "generatingForm": "Generating...",
     "selectFormType": "Select form type",
     "t2": "T2 — Corporation Income Tax Return",
     "co17": "CO-17 — Corporation Income Tax Return (Quebec)",
@@ -199,11 +240,24 @@
       "submitted": "Submitted",
       "accepted": "Accepted"
     },
-    "previewForm": "Preview form",
+    "previewForm": "Form preview",
     "fillAutomatically": "Auto-fill",
     "submittedOn": "Submitted on",
     "noFormsGenerated": "No forms generated yet",
-    "startGenerating": "Generate a form to get started"
+    "startGenerating": "Generate a form to get started",
+    "formsOverview": "Forms overview",
+    "formsDescription": "Generate, preview and submit your government tax forms",
+    "submissionHistory": "Submission history",
+    "taxYear": "Tax year",
+    "choosePlaceholder": "Choose a form...",
+    "chooseYearPlaceholder": "Choose a year...",
+    "generateInfo": "The form will be generated with your company information. You can then preview and submit it.",
+    "section": "Section",
+    "field": "Field",
+    "value": "Value",
+    "deleteConfirm": "Are you sure you want to delete this form?",
+    "generatedOn": "Generated on",
+    "noHistory": "No submission history yet."
   },
   "assistant": {
     "title": "AI Assistant",
@@ -228,7 +282,7 @@
     "companyName": "Company name",
     "neq": "Quebec Enterprise Number (NEQ)",
     "bn": "Federal Business Number (BN)",
-    "fiscalYearEnd": "Fiscal year end",
+    "fiscalYearEnd": "Fiscal year end (MM-DD)",
     "incorporationDate": "Incorporation date",
     "province": "Province",
     "corporationType": "Corporation type",
