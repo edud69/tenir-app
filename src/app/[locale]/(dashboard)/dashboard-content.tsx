@@ -2,7 +2,7 @@
 
 import React, { ReactNode, useState } from 'react';
 import Sidebar from '@/components/layout/sidebar';
-import ChatWidget from '@/components/assistant/chat-widget';
+import { ChatWidget } from '@/components/assistant/chat-widget';
 
 interface DashboardContentProps {
   children: ReactNode;

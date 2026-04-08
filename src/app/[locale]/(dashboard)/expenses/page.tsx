@@ -100,7 +100,7 @@ const mockTransactions: Transaction[] = [
     amount: -385.50,
     vendor: 'Microsoft',
     recurring: true,
-    frequency: 'annual',
+    frequency: 'annually',
   },
   {
     id: '8',

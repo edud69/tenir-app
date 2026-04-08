@@ -13,9 +13,9 @@ import {
   FileText,
   Zap,
   Globe,
-  Google,
+  Globe2,
   Mail,
-  Bank,
+  Landmark,
   Check,
 } from 'lucide-react';
 
@@ -258,7 +258,7 @@ function IntegrationsTab() {
       <Card padding="md" shadow="sm">
         <CardHeader>
           <div className="flex items-center gap-3">
-            <Google size={24} className="text-blue-600" />
+            <Globe2 size={24} className="text-blue-600" />
             <div>
               <CardTitle level="h3">Google Drive</CardTitle>
               <p className="text-sm text-gray-600 mt-1">
@@ -330,7 +330,7 @@ function IntegrationsTab() {
       <Card padding="md" shadow="sm">
         <CardHeader>
           <div className="flex items-center gap-3">
-            <Bank size={24} className="text-orange-600" />
+            <Landmark size={24} className="text-orange-600" />
             <div>
               <CardTitle level="h3">{t('bankConnection')}</CardTitle>
               <p className="text-sm text-gray-600 mt-1">

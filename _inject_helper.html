@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head><title>Tenir File Injector</title></head>
+<body>
+<h3>Tenir File Injector</h3>
+<input type="file" id="f" style="font-size:18px;padding:10px" />
+<div id="status" style="margin-top:20px;font-size:16px;color:blue">Waiting for file...</div>
+<script>
+document.getElementById('f').onchange = function(e) {
+  const file = e.target.files[0];
+  document.getElementById('status').textContent = 'Reading: ' + file.name + ' (' + file.size + ' bytes)...';
+  const reader = new FileReader();
+  reader.onload = function(e2) {
+    const b64 = e2.target.result.split(',')[1];
+    document.getElementById('status').textContent = 'Sending b64 (' + b64.length + ' chars) to Vercel tab...';
+    if (window.opener) {
+      window.opener.postMessage({type:'tenir_inject', b64: b64, filename: file.name}, '*');
+      document.getElementById('status').textContent = 'SENT! b64=' + b64.length + ' for ' + file.name;
+    } else {
+      document.getElementById('status').textContent = 'ERROR: No opener window';
+    }
+  };
+  reader.readAsDataURL(file);
+};
+</script>
+</body>
+</html>

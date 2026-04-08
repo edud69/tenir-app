@@ -102,7 +102,7 @@ export default function SignupPage() {
       const userId = authData.user.id;
 
       // Create organization
-      const { data: orgData, error: orgError } = await supabase
+      const { data: orgData, error: orgError } = await (supabase as any)
         .from('organizations')
         .insert({
           name: formData.companyName,
@@ -119,7 +119,7 @@ export default function SignupPage() {
       }
 
       // Create organization membership
-      const { error: memberError } = await supabase
+      const { error: memberError } = await (supabase as any)
         .from('organization_members')
         .insert({
           organization_id: orgData.id,
