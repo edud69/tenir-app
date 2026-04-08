@@ -56,7 +56,8 @@
     "companyName": "Company name",
     "neq": "Quebec Enterprise Number (NEQ)",
     "bn": "Federal Business Number (BN)",
-    "fiscalYearEnd": "Fiscal year end"
+    "fiscalYearEnd": "Fiscal year end",
+    "or": "or"
   },
   "dashboard": {
     "welcome": "Welcome, {name}",

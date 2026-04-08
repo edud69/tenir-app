@@ -56,7 +56,8 @@
     "companyName": "Nom de la société",
     "neq": "Numéro d'entreprise du Québec (NEQ)",
     "bn": "Numéro d'entreprise fédéral (NE)",
-    "fiscalYearEnd": "Fin d'exercice financier"
+    "fiscalYearEnd": "Fin d'exercice financier",
+    "or": "ou"
   },
   "dashboard": {
     "welcome": "Bienvenue, {name}",

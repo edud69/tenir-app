@@ -51,10 +51,6 @@ export default function SignupPage() {
       errors.companyName = 'Company name is required';
     }
 
-    if (!formData.fiscalYearEnd) {
-      errors.fiscalYearEnd = 'Fiscal year end is required';
-    }
-
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -217,8 +213,6 @@ export default function SignupPage() {
           name="fiscalYearEnd"
           value={formData.fiscalYearEnd}
           onChange={handleChange}
-          error={validationErrors.fiscalYearEnd}
-          required
           disabled={isLoading}
         />
 
