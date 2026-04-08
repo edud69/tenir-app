@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,9 @@ import { createClient } from '@/lib/supabase/client';
 export default function LoginPage() {
   const t = useTranslations('auth');
   const router = useRouter();
+  const pathname = usePathname();
   const supabase = createClient();
+  const locale = pathname.split('/')[1] || 'fr';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -36,7 +38,7 @@ export default function LoginPage() {
       }
 
       // Successfully signed in, redirect to dashboard
-      router.push('/dashboard');
+      router.push(`/${locale}/dashboard`);
     } catch (err) {
       setError('An unexpected error occurred. Please try again.');
       setIsLoading(false);
@@ -93,7 +95,7 @@ export default function LoginPage() {
       {/* Forgot Password Link */}
       <div className="text-center">
         <Link
-          href="/forgot-password"
+          href={`/${locale}/forgot-password`}
           className="text-sm text-tenir-600 hover:text-tenir-700 font-medium"
         >
           {t('forgotPassword')}
@@ -106,7 +108,7 @@ export default function LoginPage() {
           {t('noAccount')}{' '}
           <span className="text-gray-400">{t('or')}</span>
         </p>
-        <Link href="/signup">
+        <Link href={`/${locale}/signup`}>
           <Button variant="outline" fullWidth>
             {t('signup')}
           </Button>

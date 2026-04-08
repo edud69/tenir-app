@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,9 @@ import { createClient } from '@/lib/supabase/client';
 export default function SignupPage() {
   const t = useTranslations('auth');
   const router = useRouter();
+  const pathname = usePathname();
   const supabase = createClient();
+  const locale = pathname.split('/')[1] || 'fr';
 
   const [formData, setFormData] = useState({
     email: '',
@@ -234,7 +236,7 @@ export default function SignupPage() {
           {t('hasAccount')}{' '}
           <span className="text-gray-400">{t('or')}</span>
         </p>
-        <Link href="/login">
+        <Link href={`/${locale}/login`}>
           <Button variant="outline" fullWidth>
             {t('login')}
           </Button>

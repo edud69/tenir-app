@@ -1,42 +1,21 @@
-import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { redirect } from 'next/navigation';
+import { createServerSupabaseClient } from '@/lib/supabase/server';
 
-export default function LandingPage() {
-  const t = useTranslations();
+interface Props {
+  params: { locale: string };
+}
 
-  const features = [
-    {
-      icon: '📸',
-      titleKey: 'landing.features.receipts.title',
-      descKey: 'landing.features.receipts.desc',
-    },
-    {
-      icon: '💰',
-      titleKey: 'landing.features.expenses.title',
-      descKey: 'landing.features.expenses.desc',
-    },
-    {
-      icon: '📊',
-      titleKey: 'landing.features.taxes.title',
-      descKey: 'landing.features.taxes.desc',
-    },
-    {
-      icon: '📝',
-      titleKey: 'landing.features.forms.title',
-      descKey: 'landing.features.forms.desc',
-    },
-    {
-      icon: '🤖',
-      titleKey: 'landing.features.assistant.title',
-      descKey: 'landing.features.assistant.desc',
-    },
-    {
-      icon: '🔐',
-      titleKey: 'landing.features.security.title',
-      descKey: 'landing.features.security.desc',
-    },
-  ];
+export default async function LandingPage({ params }: Props) {
+  const { locale } = params;
+
+  // Redirect logged-in users straight to dashboard
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) {
+    redirect(`/${locale}/dashboard`);
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-tenir-50 via-white to-accent-50">
@@ -45,11 +24,11 @@ export default function LandingPage() {
         <div className="container max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-tenir-600">tenir.app</h1>
           <div className="flex gap-3">
-            <Link href="/login">
-              <Button variant="ghost">{t('auth.login')}</Button>
+            <Link href={`/${locale}/login`}>
+              <Button variant="ghost">Se connecter</Button>
             </Link>
-            <Link href="/signup">
-              <Button variant="primary">{t('auth.signup')}</Button>
+            <Link href={`/${locale}/signup`}>
+              <Button variant="primary">Créer un compte</Button>
             </Link>
           </div>
         </div>
@@ -58,104 +37,88 @@ export default function LandingPage() {
       {/* Hero Section */}
       <section className="container max-w-6xl mx-auto px-4 py-20 text-center">
         <h2 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
-          {t('common.appName')}
+          tenir.app
         </h2>
         <p className="text-xl md:text-2xl text-gray-600 mb-4">
-          {t('common.tagline')}
+          La comptabilité simplifiée pour votre société de portefeuille
         </p>
         <p className="text-lg text-gray-500 mb-12 max-w-2xl mx-auto">
-          Stop spending hours on accounting. Automate receipt scanning, expense
-          tracking, and tax calculations for your holding company.
+          Téléversez vos reçus, suivez vos dépenses et revenus, calculez vos impôts corporatifs
+          et générez vos formulaires gouvernementaux — le tout en français.
         </p>
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <Link href="/signup">
+          <Link href={`/${locale}/signup`}>
             <Button size="lg" variant="primary" className="px-8">
-              {t('auth.signup')}
+              Commencer gratuitement
             </Button>
           </Link>
-          <button className="text-tenir-600 hover:text-tenir-700 font-medium">
-            Watch demo ↓
-          </button>
+          <Link href={`/${locale}/login`}>
+            <Button size="lg" variant="outline" className="px-8">
+              Se connecter
+            </Button>
+          </Link>
         </div>
       </section>
 
       {/* Features Section */}
       <section className="container max-w-6xl mx-auto px-4 py-20">
         <h3 className="text-3xl font-bold text-center text-gray-900 mb-12">
-          Why tenir.app?
+          Tout ce dont vous avez besoin
         </h3>
 
         <div className="grid md:grid-cols-3 gap-8">
-          {/* Receipt Scanning */}
           <div className="bg-white rounded-xl p-8 border border-gray-200 hover:border-tenir-300 transition">
             <div className="text-4xl mb-4">📸</div>
-            <h4 className="text-xl font-bold text-gray-900 mb-2">
-              Smart Receipt Scanning
-            </h4>
+            <h4 className="text-xl font-bold text-gray-900 mb-2">Numérisation de reçus</h4>
             <p className="text-gray-600">
-              Upload receipts via email, Google Drive, or mobile. AI automatically
-              extracts vendor, amount, date, and tax information.
+              Téléversez vos reçus par glisser-déposer. L&apos;IA extrait automatiquement
+              le fournisseur, le montant, la date, la TPS et la TVQ.
             </p>
           </div>
 
-          {/* Expense Tracking */}
           <div className="bg-white rounded-xl p-8 border border-gray-200 hover:border-tenir-300 transition">
             <div className="text-4xl mb-4">💰</div>
-            <h4 className="text-xl font-bold text-gray-900 mb-2">
-              Expense Tracking
-            </h4>
+            <h4 className="text-xl font-bold text-gray-900 mb-2">Suivi des dépenses</h4>
             <p className="text-gray-600">
-              Track expenses, revenue, dividends, and capital gains. Automatically
-              categorize transactions and generate reports.
+              Suivez vos dépenses, revenus, dividendes et gains en capital.
+              Catégorisez vos transactions et générez des rapports.
             </p>
           </div>
 
-          {/* Tax Projections */}
           <div className="bg-white rounded-xl p-8 border border-gray-200 hover:border-tenir-300 transition">
             <div className="text-4xl mb-4">📊</div>
-            <h4 className="text-xl font-bold text-gray-900 mb-2">
-              Tax Projections
-            </h4>
+            <h4 className="text-xl font-bold text-gray-900 mb-2">Projections fiscales</h4>
             <p className="text-gray-600">
-              Real-time tax calculations for federal and provincial rates.
-              Estimate installments and optimize your tax strategy.
+              Calculs d&apos;impôts fédéraux et québécois en temps réel.
+              IMRTD, CDC, acomptes provisionnels — tout y est.
             </p>
           </div>
 
-          {/* Form Generation */}
           <div className="bg-white rounded-xl p-8 border border-gray-200 hover:border-tenir-300 transition">
             <div className="text-4xl mb-4">📝</div>
-            <h4 className="text-xl font-bold text-gray-900 mb-2">
-              Form Generation
-            </h4>
+            <h4 className="text-xl font-bold text-gray-900 mb-2">Formulaires gouvernementaux</h4>
             <p className="text-gray-600">
-              Auto-generate government forms (T2, CO-17, T5, RL-3) with
-              pre-filled data. Ready for online submission.
+              Générez automatiquement vos formulaires T2, CO-17, T5 et RL-3
+              avec les données pré-remplies.
             </p>
           </div>
 
-          {/* AI Assistant */}
           <div className="bg-white rounded-xl p-8 border border-gray-200 hover:border-tenir-300 transition">
             <div className="text-4xl mb-4">🤖</div>
-            <h4 className="text-xl font-bold text-gray-900 mb-2">
-              AI Assistant
-            </h4>
+            <h4 className="text-xl font-bold text-gray-900 mb-2">Assistant IA</h4>
             <p className="text-gray-600">
-              Get instant answers to accounting questions. Discuss tax strategy,
-              deductions, and dividend planning.
+              Obtenez des réponses instantanées à vos questions de comptabilité.
+              Planification fiscale, déductions, stratégie de dividendes.
             </p>
           </div>
 
-          {/* Security */}
           <div className="bg-white rounded-xl p-8 border border-gray-200 hover:border-tenir-300 transition">
-            <div className="text-4xl mb-4">🔐</div>
-            <h4 className="text-xl font-bold text-gray-900 mb-2">
-              Enterprise Security
-            </h4>
+            <div className="text-4xl mb-4">📈</div>
+            <h4 className="text-xl font-bold text-gray-900 mb-2">Portefeuille de placements</h4>
             <p className="text-gray-600">
-              End-to-end encryption, SOC 2 compliance, and automatic backups.
-              Your data is always protected.
+              Suivez votre portefeuille, calculez le PBR, les gains non réalisés
+              et les revenus de dividendes déterminés et non déterminés.
             </p>
           </div>
         </div>
@@ -165,94 +128,23 @@ export default function LandingPage() {
       <section className="bg-tenir-600 text-white py-20">
         <div className="container max-w-4xl mx-auto px-4 text-center">
           <h3 className="text-4xl font-bold mb-4">
-            Ready to simplify your accounting?
+            Prêt à simplifier votre comptabilité?
           </h3>
           <p className="text-xl text-tenir-100 mb-8">
-            Join holding company owners who save hours every week with tenir.app
+            Conçu spécifiquement pour les sociétés de portefeuille québécoises.
           </p>
-
-          <Link href="/signup">
+          <Link href={`/${locale}/signup`}>
             <Button size="lg" variant="secondary" className="px-8">
-              Get Started Free
+              Commencer gratuitement
             </Button>
           </Link>
-
-          <p className="text-tenir-100 text-sm mt-6">
-            No credit card required. 14-day free trial.
-          </p>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-gray-200 bg-white py-12">
-        <div className="container max-w-6xl mx-auto px-4">
-          <div className="grid md:grid-cols-4 gap-8 mb-8">
-            <div>
-              <h4 className="font-bold text-gray-900 mb-4">tenir.app</h4>
-              <p className="text-sm text-gray-600">
-                Simplified accounting for holding companies
-              </p>
-            </div>
-            <div>
-              <h4 className="font-bold text-gray-900 mb-4">Product</h4>
-              <ul className="space-y-2 text-sm text-gray-600">
-                <li>
-                  <a href="#" className="hover:text-tenir-600">
-                    Features
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-tenir-600">
-                    Pricing
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-tenir-600">
-                    Security
-                  </a>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-bold text-gray-900 mb-4">Company</h4>
-              <ul className="space-y-2 text-sm text-gray-600">
-                <li>
-                  <a href="#" className="hover:text-tenir-600">
-                    About
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-tenir-600">
-                    Blog
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-tenir-600">
-                    Contact
-                  </a>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-bold text-gray-900 mb-4">Legal</h4>
-              <ul className="space-y-2 text-sm text-gray-600">
-                <li>
-                  <a href="#" className="hover:text-tenir-600">
-                    Privacy
-                  </a>
-                </li>
-                <li>
-                  <a href="#" className="hover:text-tenir-600">
-                    Terms
-                  </a>
-                </li>
-              </ul>
-            </div>
-          </div>
-
-          <div className="border-t border-gray-200 pt-8 text-center text-sm text-gray-600">
-            <p>&copy; 2026 tenir.app. All rights reserved.</p>
-          </div>
+      <footer className="border-t border-gray-200 bg-white py-8">
+        <div className="container max-w-6xl mx-auto px-4 text-center text-sm text-gray-600">
+          <p>&copy; 2026 tenir.app. Tous droits réservés.</p>
         </div>
       </footer>
     </div>

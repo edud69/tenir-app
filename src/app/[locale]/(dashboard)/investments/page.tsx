@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { formatCurrency, formatDate, formatPercent, cn } from '@/lib/utils';
 import Header from '@/components/layout/header';
@@ -12,114 +12,52 @@ import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
 import { Table, TableBody, TableHead, TableHeader, TableRow, TableCell } from '@/components/ui/table';
 import { Plus, TrendingUp, DollarSign, ArrowUpRight, ArrowDownLeft, Edit2, Trash2 } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
+import { useOrganization } from '@/hooks/useOrganization';
 
 interface Investment {
   id: string;
+  organization_id: string;
   symbol: string;
   name: string;
+  type: string;
   shares: number;
-  acb: number; // Adjusted Cost Base per share
-  currentPrice: number;
-  lastUpdated: string;
-  sector?: string;
+  purchase_price: number;
+  purchase_date: string;
+  adjusted_cost_base: number | null;
+  current_price: number | null;
+  currency: string;
+  account_type: string | null;
+  notes: string | null;
+  sold: boolean;
+  sale_price: number | null;
+  sale_date: string | null;
 }
 
-interface Dividend {
+interface DividendRecord {
   id: string;
-  date: string;
-  symbol: string;
-  payer: string;
+  organization_id: string;
+  investment_id: string | null;
   amount: number;
-  type: 'eligible' | 'ineligible' | 'return_of_capital';
+  dividend_type: 'eligible' | 'non_eligible' | 'capital' | 'foreign';
+  date: string;
+  payer: string | null;
+  currency: string;
+  withholding_tax: number | null;
 }
 
-const mockInvestments: Investment[] = [
-  {
-    id: '1',
-    symbol: 'RBC',
-    name: 'Royal Bank of Canada',
-    shares: 150,
-    acb: 98.5,
-    currentPrice: 126.45,
-    lastUpdated: '2024-03-20',
-    sector: 'Financials',
-  },
-  {
-    id: '2',
-    symbol: 'TD',
-    name: 'Toronto-Dominion Bank',
-    shares: 200,
-    acb: 68.2,
-    currentPrice: 81.30,
-    lastUpdated: '2024-03-20',
-    sector: 'Financials',
-  },
-  {
-    id: '3',
-    symbol: 'CNQ',
-    name: 'Canadian Natural Resources',
-    shares: 250,
-    acb: 42.1,
-    currentPrice: 56.75,
-    lastUpdated: '2024-03-20',
-    sector: 'Energy',
-  },
-  {
-    id: '4',
-    symbol: 'MSFT',
-    name: 'Microsoft Corporation',
-    shares: 50,
-    acb: 310.25,
-    currentPrice: 421.80,
-    lastUpdated: '2024-03-20',
-    sector: 'Technology',
-  },
-  {
-    id: '5',
-    symbol: 'VFV',
-    name: 'Vanguard U.S. Total Index ETF',
-    shares: 300,
-    acb: 68.5,
-    currentPrice: 82.10,
-    lastUpdated: '2024-03-20',
-    sector: 'Diversified',
-  },
-];
-
-const mockDividends: Dividend[] = [
-  {
-    id: '1',
-    date: '2024-03-15',
-    symbol: 'RBC',
-    payer: 'Royal Bank of Canada',
-    amount: 112.50,
-    type: 'eligible',
-  },
-  {
-    id: '2',
-    date: '2024-03-10',
-    symbol: 'TD',
-    payer: 'Toronto-Dominion Bank',
-    amount: 150.00,
-    type: 'eligible',
-  },
-  {
-    id: '3',
-    date: '2024-02-28',
-    symbol: 'CNQ',
-    payer: 'Canadian Natural Resources',
-    amount: 87.50,
-    type: 'ineligible',
-  },
-  {
-    id: '4',
-    date: '2024-02-15',
-    symbol: 'VFV',
-    payer: 'Vanguard U.S. Total Index ETF',
-    amount: 65.25,
-    type: 'eligible',
-  },
-];
+interface InvestmentFormData {
+  symbol: string;
+  name: string;
+  type: string;
+  shares: number;
+  purchase_price: number;
+  purchase_date: string;
+  current_price: number;
+  currency: string;
+  account_type: string;
+  notes: string;
+}
 
 function InvestmentModal({
   isOpen,
@@ -129,21 +67,29 @@ function InvestmentModal({
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: Partial<Investment>) => void;
-  initialData?: Investment;
+  onSubmit: (data: InvestmentFormData) => void;
+  initialData?: InvestmentFormData;
 }) {
   const t = useTranslations('investments');
   const commonT = useTranslations('common');
-  const [formData, setFormData] = useState<Partial<Investment>>(
+  const [formData, setFormData] = useState<InvestmentFormData>(
     initialData || {
       symbol: '',
       name: '',
+      type: 'stock',
       shares: 0,
-      acb: 0,
-      currentPrice: 0,
-      lastUpdated: new Date().toISOString().split('T')[0],
+      purchase_price: 0,
+      purchase_date: new Date().toISOString().split('T')[0],
+      current_price: 0,
+      currency: 'CAD',
+      account_type: '',
+      notes: '',
     }
   );
+
+  useEffect(() => {
+    if (initialData) setFormData(initialData);
+  }, [initialData]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -172,16 +118,41 @@ function InvestmentModal({
         <div className="grid grid-cols-2 gap-4">
           <Input
             label={t('symbol')}
-            value={formData.symbol || ''}
+            value={formData.symbol}
             onChange={(e) => setFormData({ ...formData, symbol: e.target.value })}
             placeholder="e.g., RBC"
             required
           />
           <Input
             label="Name"
-            value={formData.name || ''}
+            value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
             required
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <Select
+            label="Type"
+            value={formData.type}
+            onChange={(value) => setFormData({ ...formData, type: value as string })}
+            options={[
+              { value: 'stock', label: 'Stock' },
+              { value: 'etf', label: 'ETF' },
+              { value: 'bond', label: 'Bond' },
+              { value: 'gic', label: 'GIC' },
+              { value: 'mutual_fund', label: 'Mutual Fund' },
+              { value: 'other', label: 'Other' },
+            ]}
+          />
+          <Select
+            label="Currency"
+            value={formData.currency}
+            onChange={(value) => setFormData({ ...formData, currency: value as string })}
+            options={[
+              { value: 'CAD', label: 'CAD' },
+              { value: 'USD', label: 'USD' },
+            ]}
           />
         </div>
 
@@ -190,16 +161,16 @@ function InvestmentModal({
             label={t('shares')}
             type="number"
             step="0.01"
-            value={formData.shares || 0}
-            onChange={(e) => setFormData({ ...formData, shares: parseFloat(e.target.value) })}
+            value={formData.shares}
+            onChange={(e) => setFormData({ ...formData, shares: parseFloat(e.target.value) || 0 })}
             required
           />
           <Input
             label={t('acb')}
             type="number"
             step="0.01"
-            value={formData.acb || 0}
-            onChange={(e) => setFormData({ ...formData, acb: parseFloat(e.target.value) })}
+            value={formData.purchase_price}
+            onChange={(e) => setFormData({ ...formData, purchase_price: parseFloat(e.target.value) || 0 })}
             helperText="Per share"
             required
           />
@@ -207,18 +178,24 @@ function InvestmentModal({
             label={t('currentValue')}
             type="number"
             step="0.01"
-            value={formData.currentPrice || 0}
-            onChange={(e) => setFormData({ ...formData, currentPrice: parseFloat(e.target.value) })}
+            value={formData.current_price}
+            onChange={(e) => setFormData({ ...formData, current_price: parseFloat(e.target.value) || 0 })}
             helperText="Per share"
             required
           />
         </div>
 
         <Input
-          label="Last Updated"
+          label="Purchase Date"
           type="date"
-          value={formData.lastUpdated || ''}
-          onChange={(e) => setFormData({ ...formData, lastUpdated: e.target.value })}
+          value={formData.purchase_date}
+          onChange={(e) => setFormData({ ...formData, purchase_date: e.target.value })}
+        />
+
+        <Input
+          label="Notes"
+          value={formData.notes}
+          onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
         />
       </form>
     </Modal>
@@ -255,31 +232,116 @@ function PortfolioSummaryCard({
 export default function InvestmentsPage() {
   const t = useTranslations('investments');
   const commonT = useTranslations('common');
-  const [investments, setInvestments] = useState<Investment[]>(mockInvestments);
-  const [dividends, setDividends] = useState<Dividend[]>(mockDividends);
+  const { orgId, loading: orgLoading } = useOrganization();
+  const supabase = createClient();
+
+  const [investments, setInvestments] = useState<Investment[]>([]);
+  const [dividends, setDividends] = useState<DividendRecord[]>([]);
+  const [dataLoading, setDataLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Calculate portfolio metrics
-  const portfolioBookValue = investments.reduce((sum, inv) => sum + inv.shares * inv.acb, 0);
-  const portfolioMarketValue = investments.reduce((sum, inv) => sum + inv.shares * inv.currentPrice, 0);
+  useEffect(() => {
+    if (!orgId) return;
+    fetchData();
+  }, [orgId]);
+
+  async function fetchData() {
+    setDataLoading(true);
+    setError(null);
+    try {
+      const [invRes, divRes] = await Promise.all([
+        (supabase as any)
+          .from('investments')
+          .select('*')
+          .eq('organization_id', orgId)
+          .eq('sold', false)
+          .order('created_at', { ascending: false }),
+        (supabase as any)
+          .from('dividend_records')
+          .select('*')
+          .eq('organization_id', orgId)
+          .order('date', { ascending: false }),
+      ]);
+
+      if (invRes.error) throw invRes.error;
+      if (divRes.error) throw divRes.error;
+
+      setInvestments(invRes.data || []);
+      setDividends(divRes.data || []);
+    } catch (e: any) {
+      setError(e.message || 'Failed to load investments');
+    } finally {
+      setDataLoading(false);
+    }
+  }
+
+  // Calculate portfolio metrics from real data
+  const portfolioBookValue = investments.reduce(
+    (sum, inv) => sum + inv.shares * inv.purchase_price,
+    0
+  );
+  const portfolioMarketValue = investments.reduce(
+    (sum, inv) => sum + inv.shares * (inv.current_price ?? inv.purchase_price),
+    0
+  );
   const unrealizedGain = portfolioMarketValue - portfolioBookValue;
-  const unrealizedGainPercent = (unrealizedGain / portfolioBookValue) * 100;
+  const unrealizedGainPercent =
+    portfolioBookValue > 0 ? (unrealizedGain / portfolioBookValue) * 100 : 0;
 
-  // Calculate YTD dividend income
   const ytdDividendIncome = dividends.reduce((sum, div) => sum + div.amount, 0);
 
-  const handleAddInvestment = (data: Partial<Investment>) => {
-    const newInvestment: Investment = {
-      id: Math.random().toString(36).substr(2, 9),
-      symbol: data.symbol || '',
-      name: data.name || '',
-      shares: data.shares || 0,
-      acb: data.acb || 0,
-      currentPrice: data.currentPrice || 0,
-      lastUpdated: data.lastUpdated || new Date().toISOString().split('T')[0],
-    };
-    setInvestments([...investments, newInvestment]);
+  const handleAddInvestment = async (data: InvestmentFormData) => {
+    if (!orgId) return;
+    try {
+      const { error } = await (supabase as any).from('investments').insert({
+        organization_id: orgId,
+        symbol: data.symbol,
+        name: data.name,
+        type: data.type,
+        shares: data.shares,
+        purchase_price: data.purchase_price,
+        purchase_date: data.purchase_date,
+        adjusted_cost_base: data.purchase_price,
+        current_price: data.current_price || null,
+        currency: data.currency,
+        account_type: data.account_type || null,
+        notes: data.notes || null,
+        sold: false,
+      });
+      if (error) throw error;
+      await fetchData();
+    } catch (e: any) {
+      setError(e.message || 'Failed to add investment');
+    }
   };
+
+  const handleDeleteInvestment = async (id: string) => {
+    if (!confirm('Delete this investment?')) return;
+    try {
+      const { error } = await (supabase as any)
+        .from('investments')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      setInvestments((prev) => prev.filter((inv) => inv.id !== id));
+    } catch (e: any) {
+      setError(e.message || 'Failed to delete investment');
+    }
+  };
+
+  const isLoading = orgLoading || dataLoading;
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col h-full overflow-hidden">
+        <Header title={t('title')} />
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-gray-500">{commonT('loading')}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -287,6 +349,12 @@ export default function InvestmentsPage() {
 
       <div className="flex-1 overflow-y-auto">
         <div className="p-6 lg:p-8">
+          {error && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+              {error}
+            </div>
+          )}
+
           {/* Portfolio Summary */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <PortfolioSummaryCard
@@ -332,88 +400,102 @@ export default function InvestmentsPage() {
               <CardTitle level="h3">Holdings ({investments.length})</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
-                <Table hoverable>
-                  <TableHeader>
-                    <TableRow isHeader>
-                      <TableHead>Symbol</TableHead>
-                      <TableHead>Name</TableHead>
-                      <TableHead align="right">Shares</TableHead>
-                      <TableHead align="right">ACB</TableHead>
-                      <TableHead align="right">Price</TableHead>
-                      <TableHead align="right">Market Value</TableHead>
-                      <TableHead align="right">Gain/Loss</TableHead>
-                      <TableHead align="center">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {investments.map((inv) => {
-                      const bookValue = inv.shares * inv.acb;
-                      const marketValue = inv.shares * inv.currentPrice;
-                      const gainLoss = marketValue - bookValue;
-                      const gainLossPercent = (gainLoss / bookValue) * 100;
+              {investments.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-gray-500 mb-4">{commonT('noResults')}</p>
+                  <Button
+                    variant="outline"
+                    icon={<Plus size={16} />}
+                    onClick={() => setIsModalOpen(true)}
+                  >
+                    {t('addInvestment')}
+                  </Button>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table hoverable>
+                    <TableHeader>
+                      <TableRow isHeader>
+                        <TableHead>Symbol</TableHead>
+                        <TableHead>Name</TableHead>
+                        <TableHead align="right">Shares</TableHead>
+                        <TableHead align="right">ACB</TableHead>
+                        <TableHead align="right">Price</TableHead>
+                        <TableHead align="right">Market Value</TableHead>
+                        <TableHead align="right">Gain/Loss</TableHead>
+                        <TableHead align="center">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {investments.map((inv) => {
+                        const bookValue = inv.shares * inv.purchase_price;
+                        const marketValue = inv.shares * (inv.current_price ?? inv.purchase_price);
+                        const gainLoss = marketValue - bookValue;
+                        const gainLossPercent =
+                          bookValue > 0 ? (gainLoss / bookValue) * 100 : 0;
 
-                      return (
-                        <TableRow key={inv.id}>
-                          <TableCell className="font-semibold text-tenir-600">
-                            {inv.symbol}
-                          </TableCell>
-                          <TableCell>
-                            <div>
-                              <p className="font-medium text-gray-900">{inv.name}</p>
-                              {inv.sector && (
-                                <p className="text-xs text-gray-600">{inv.sector}</p>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell align="right" className="font-medium">
-                            {inv.shares.toLocaleString('en-CA', { maximumFractionDigits: 2 })}
-                          </TableCell>
-                          <TableCell align="right">
-                            {formatCurrency(inv.acb)}
-                          </TableCell>
-                          <TableCell align="right" className="font-semibold">
-                            {formatCurrency(inv.currentPrice)}
-                          </TableCell>
-                          <TableCell align="right" className="font-semibold">
-                            {formatCurrency(marketValue)}
-                          </TableCell>
-                          <TableCell align="right">
-                            <div className="flex flex-col items-end">
-                              <span
-                                className={cn(
-                                  'font-semibold',
-                                  gainLoss >= 0 ? 'text-green-600' : 'text-red-600'
+                        return (
+                          <TableRow key={inv.id}>
+                            <TableCell className="font-semibold text-tenir-600">
+                              {inv.symbol}
+                            </TableCell>
+                            <TableCell>
+                              <div>
+                                <p className="font-medium text-gray-900">{inv.name}</p>
+                                {inv.type && (
+                                  <p className="text-xs text-gray-600 capitalize">{inv.type.replace('_', ' ')}</p>
                                 )}
-                              >
-                                {formatCurrency(gainLoss)}
-                              </span>
-                              <span
-                                className={cn(
-                                  'text-xs',
-                                  gainLoss >= 0 ? 'text-green-600' : 'text-red-600'
-                                )}
-                              >
-                                ({gainLoss >= 0 ? '+' : ''}{gainLossPercent.toFixed(1)}%)
-                              </span>
-                            </div>
-                          </TableCell>
-                          <TableCell align="center">
-                            <div className="flex items-center justify-center gap-2">
-                              <button className="p-1 hover:bg-gray-100 rounded transition-colors">
-                                <Edit2 size={16} className="text-gray-600" />
-                              </button>
-                              <button className="p-1 hover:bg-red-50 rounded transition-colors">
-                                <Trash2 size={16} className="text-red-600" />
-                              </button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
+                              </div>
+                            </TableCell>
+                            <TableCell align="right" className="font-medium">
+                              {inv.shares.toLocaleString('en-CA', { maximumFractionDigits: 2 })}
+                            </TableCell>
+                            <TableCell align="right">
+                              {formatCurrency(inv.purchase_price)}
+                            </TableCell>
+                            <TableCell align="right" className="font-semibold">
+                              {formatCurrency(inv.current_price ?? inv.purchase_price)}
+                            </TableCell>
+                            <TableCell align="right" className="font-semibold">
+                              {formatCurrency(marketValue)}
+                            </TableCell>
+                            <TableCell align="right">
+                              <div className="flex flex-col items-end">
+                                <span
+                                  className={cn(
+                                    'font-semibold',
+                                    gainLoss >= 0 ? 'text-green-600' : 'text-red-600'
+                                  )}
+                                >
+                                  {formatCurrency(gainLoss)}
+                                </span>
+                                <span
+                                  className={cn(
+                                    'text-xs',
+                                    gainLoss >= 0 ? 'text-green-600' : 'text-red-600'
+                                  )}
+                                >
+                                  ({gainLoss >= 0 ? '+' : ''}{gainLossPercent.toFixed(1)}%)
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell align="center">
+                              <div className="flex items-center justify-center gap-2">
+                                <button
+                                  className="p-1 hover:bg-red-50 rounded transition-colors"
+                                  onClick={() => handleDeleteInvestment(inv.id)}
+                                >
+                                  <Trash2 size={16} className="text-red-600" />
+                                </button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -427,7 +509,6 @@ export default function InvestmentsPage() {
                 <TableHeader>
                   <TableRow isHeader>
                     <TableHead>Date</TableHead>
-                    <TableHead>Symbol</TableHead>
                     <TableHead>Payer</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead align="right">Amount</TableHead>
@@ -438,26 +519,25 @@ export default function InvestmentsPage() {
                     dividends.map((div) => (
                       <TableRow key={div.id}>
                         <TableCell>{formatDate(div.date)}</TableCell>
-                        <TableCell className="font-semibold text-tenir-600">
-                          {div.symbol}
-                        </TableCell>
-                        <TableCell>{div.payer}</TableCell>
+                        <TableCell>{div.payer || '—'}</TableCell>
                         <TableCell>
                           <Badge
                             variant={
-                              div.type === 'eligible'
+                              div.dividend_type === 'eligible'
                                 ? 'success'
-                                : div.type === 'ineligible'
+                                : div.dividend_type === 'non_eligible'
                                   ? 'warning'
                                   : 'info'
                             }
                             size="sm"
                           >
-                            {div.type === 'eligible'
+                            {div.dividend_type === 'eligible'
                               ? 'Eligible'
-                              : div.type === 'ineligible'
+                              : div.dividend_type === 'non_eligible'
                                 ? 'Non-eligible'
-                                : 'ROC'}
+                                : div.dividend_type === 'capital'
+                                  ? 'Capital'
+                                  : 'Foreign'}
                           </Badge>
                         </TableCell>
                         <TableCell align="right" className="font-semibold">
@@ -467,7 +547,7 @@ export default function InvestmentsPage() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8">
+                      <TableCell colSpan={4} className="text-center py-8">
                         <p className="text-gray-600">{commonT('noResults')}</p>
                       </TableCell>
                     </TableRow>
@@ -489,7 +569,7 @@ export default function InvestmentsPage() {
                       <p className="text-xl font-bold text-gray-900">
                         {formatCurrency(
                           dividends
-                            .filter((d) => d.type === 'eligible')
+                            .filter((d) => d.dividend_type === 'eligible')
                             .reduce((sum, d) => sum + d.amount, 0)
                         )}
                       </p>
@@ -499,7 +579,7 @@ export default function InvestmentsPage() {
                       <p className="text-xl font-bold text-gray-900">
                         {formatCurrency(
                           dividends
-                            .filter((d) => d.type === 'ineligible')
+                            .filter((d) => d.dividend_type === 'non_eligible')
                             .reduce((sum, d) => sum + d.amount, 0)
                         )}
                       </p>

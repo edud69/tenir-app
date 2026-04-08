@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { formatCurrency } from '@/lib/utils';
 import Header from '@/components/layout/header';
@@ -18,6 +18,8 @@ import {
   Landmark,
   Check,
 } from 'lucide-react';
+import { useOrganization } from '@/hooks/useOrganization';
+import { createClient } from '@/lib/supabase/client';
 
 interface TabProps {
   id: string;
@@ -106,24 +108,97 @@ function TabButton({
   );
 }
 
-function CompanyInfoTab({ onSave }: { onSave: () => void }) {
+function CompanyInfoTab({
+  org,
+  orgId,
+  onSave,
+}: {
+  org: any;
+  orgId: string | null;
+  onSave: (message?: string) => void;
+}) {
   const t = useTranslations('settings');
   const commonT = useTranslations('common');
+  const supabase = createClient();
+
   const [formData, setFormData] = useState<CompanyFormData>({
-    companyName: 'Acme Holdings Inc.',
-    neq: '1234567890',
-    bn: '123456789RC0001',
-    fiscalYearEnd: '12-31',
-    incorporationDate: '2018-03-15',
+    companyName: '',
+    neq: '',
+    bn: '',
+    fiscalYearEnd: '',
+    incorporationDate: '',
     province: 'qc',
   });
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Pre-fill form when org data is available
+  useEffect(() => {
+    if (!org) return;
+    const fyEnd =
+      org.fiscal_year_end_month && org.fiscal_year_end_day
+        ? `${String(org.fiscal_year_end_month).padStart(2, '0')}-${String(org.fiscal_year_end_day).padStart(2, '0')}`
+        : org.fiscal_year_end || '';
+    setFormData({
+      companyName: org.name || '',
+      neq: org.neq || '',
+      bn: org.business_number || '',
+      fiscalYearEnd: fyEnd,
+      incorporationDate: org.incorporation_date || '',
+      province: org.province || 'qc',
+    });
+  }, [org]);
 
   const handleChange = (field: keyof CompanyFormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleSave = async () => {
+    if (!orgId) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      // Parse fiscal year end MM-DD into month/day
+      let fyMonth: number | null = null;
+      let fyDay: number | null = null;
+      if (formData.fiscalYearEnd) {
+        const parts = formData.fiscalYearEnd.split('-');
+        if (parts.length === 2) {
+          fyMonth = parseInt(parts[0], 10);
+          fyDay = parseInt(parts[1], 10);
+        }
+      }
+      const updateData: Record<string, any> = {
+        name: formData.companyName,
+        neq: formData.neq || null,
+        business_number: formData.bn || null,
+        incorporation_date: formData.incorporationDate || null,
+        province: formData.province || null,
+      };
+      if (fyMonth !== null) updateData.fiscal_year_end_month = fyMonth;
+      if (fyDay !== null) updateData.fiscal_year_end_day = fyDay;
+
+      const { error } = await (supabase as any)
+        .from('organizations')
+        .update(updateData)
+        .eq('id', orgId);
+      if (error) throw error;
+      onSave();
+    } catch (e: any) {
+      setSaveError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {saveError && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+          {saveError}
+        </div>
+      )}
+
       <Input
         label={t('companyName')}
         value={formData.companyName}
@@ -170,8 +245,8 @@ function CompanyInfoTab({ onSave }: { onSave: () => void }) {
         onChange={(value) => handleChange('province', value as string)}
       />
 
-      <Button onClick={onSave} className="w-full">
-        {commonT('save')}
+      <Button onClick={handleSave} className="w-full" disabled={saving || !orgId}>
+        {saving ? 'Saving...' : commonT('save')}
       </Button>
     </div>
   );
@@ -183,8 +258,8 @@ function TaxProfileTab({ onSave }: { onSave: () => void }) {
   const [formData, setFormData] = useState<TaxFormData>({
     corporationType: 'ccpc',
     smallBusinessLimit: '500000',
-    gripBalance: '156800',
-    cdaBalance: '89450',
+    gripBalance: '0',
+    cdaBalance: '0',
   });
 
   const handleChange = (field: keyof TaxFormData, value: string) => {
@@ -387,6 +462,7 @@ function LanguageTab({ onSave }: { onSave: () => void }) {
 
 export default function SettingsPage() {
   const t = useTranslations('settings');
+  const { org, orgId, loading: orgLoading } = useOrganization();
   const [activeTab, setActiveTab] = useState('company');
   const [savedMessage, setSavedMessage] = useState('');
 
@@ -426,17 +502,23 @@ export default function SettingsPage() {
 
             {/* Tab Content */}
             <div className="p-6 lg:p-8">
-              {activeTab === 'company' && (
-                <CompanyInfoTab onSave={handleSave} />
-              )}
-              {activeTab === 'taxProfile' && (
-                <TaxProfileTab onSave={handleSave} />
-              )}
-              {activeTab === 'integrations' && (
-                <IntegrationsTab />
-              )}
-              {activeTab === 'language' && (
-                <LanguageTab onSave={handleSave} />
+              {orgLoading ? (
+                <p className="text-gray-500 text-sm">Loading...</p>
+              ) : (
+                <>
+                  {activeTab === 'company' && (
+                    <CompanyInfoTab org={org} orgId={orgId} onSave={handleSave} />
+                  )}
+                  {activeTab === 'taxProfile' && (
+                    <TaxProfileTab onSave={handleSave} />
+                  )}
+                  {activeTab === 'integrations' && (
+                    <IntegrationsTab />
+                  )}
+                  {activeTab === 'language' && (
+                    <LanguageTab onSave={handleSave} />
+                  )}
+                </>
               )}
             </div>
           </Card>

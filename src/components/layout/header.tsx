@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Search, Bell, Menu } from 'lucide-react';
+import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 
@@ -12,6 +13,17 @@ interface HeaderProps {
 
 export default function Header({ title, onMobileMenuClick }: HeaderProps) {
   const [searchQuery, setSearchQuery] = useState('');
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && searchQuery.trim()) {
+      // Derive locale prefix from current pathname (e.g. /en or /fr)
+      const localeMatch = pathname.match(/^\/([a-z]{2})(\/|$)/);
+      const localePrefix = localeMatch ? `/${localeMatch[1]}` : '';
+      router.push(`${localePrefix}/expenses?search=${encodeURIComponent(searchQuery.trim())}`);
+    }
+  };
 
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-30">
@@ -37,6 +49,7 @@ export default function Header({ title, onMobileMenuClick }: HeaderProps) {
               placeholder="Search..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
               className="pl-10 pr-4"
             />
           </div>

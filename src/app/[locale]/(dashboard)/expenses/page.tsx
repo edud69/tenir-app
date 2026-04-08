@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
+import { useSearchParams } from 'next/navigation';
 import { formatCurrency, formatDate, cn } from '@/lib/utils';
 import Header from '@/components/layout/header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,6 +13,8 @@ import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
 import { Table, TableBody, TableHead, TableHeader, TableRow, TableCell } from '@/components/ui/table';
 import { Plus, Edit2, Trash2, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import { useOrganization } from '@/hooks/useOrganization';
+import { createClient } from '@/lib/supabase/client';
 
 type TransactionType = 'expense' | 'income' | 'dividend' | 'capital_gain' | 'interest';
 
@@ -23,117 +26,11 @@ interface Transaction {
   type: TransactionType;
   amount: number;
   vendor?: string;
-  recurring: boolean;
-  frequency?: 'monthly' | 'quarterly' | 'annually';
+  is_recurring: boolean;
+  recurrence_frequency?: string;
+  organization_id?: string;
+  created_by?: string;
 }
-
-const mockTransactions: Transaction[] = [
-  {
-    id: '1',
-    date: '2024-03-20',
-    description: 'Office rent - March',
-    category: 'office',
-    type: 'expense',
-    amount: -2500,
-    vendor: 'Downtown Realty Inc.',
-    recurring: true,
-    frequency: 'monthly',
-  },
-  {
-    id: '2',
-    date: '2024-03-18',
-    description: 'Client Project Invoice',
-    category: 'income',
-    type: 'income',
-    amount: 8500,
-    vendor: 'Tech Startup Ltd.',
-    recurring: false,
-  },
-  {
-    id: '3',
-    date: '2024-03-15',
-    description: 'Professional accounting services',
-    category: 'accounting',
-    type: 'expense',
-    amount: -750,
-    vendor: 'BDO Canada',
-    recurring: false,
-  },
-  {
-    id: '4',
-    date: '2024-03-15',
-    description: 'Dividend distribution - RBC',
-    category: 'dividend',
-    type: 'dividend',
-    amount: 450,
-    vendor: 'RBC Dominion Securities',
-    recurring: true,
-    frequency: 'quarterly',
-  },
-  {
-    id: '5',
-    date: '2024-03-10',
-    description: 'Internet and phone',
-    category: 'office',
-    type: 'expense',
-    amount: -129.99,
-    vendor: 'Bell Canada',
-    recurring: true,
-    frequency: 'monthly',
-  },
-  {
-    id: '6',
-    date: '2024-03-08',
-    description: 'Legal consultation - Contract review',
-    category: 'legal',
-    type: 'expense',
-    amount: -1200,
-    vendor: 'Smith & Associates LLP',
-    recurring: false,
-  },
-  {
-    id: '7',
-    date: '2024-03-05',
-    description: 'Software licenses - Seat licenses',
-    category: 'technology',
-    type: 'expense',
-    amount: -385.50,
-    vendor: 'Microsoft',
-    recurring: true,
-    frequency: 'annually',
-  },
-  {
-    id: '8',
-    date: '2024-03-01',
-    description: 'Capital gains - AAPL sale',
-    category: 'capital_gain',
-    type: 'capital_gain',
-    amount: 3200,
-    vendor: 'Interactive Brokers',
-    recurring: false,
-  },
-  {
-    id: '9',
-    date: '2024-02-28',
-    description: 'Insurance - General liability',
-    category: 'insurance',
-    type: 'expense',
-    amount: -425,
-    vendor: 'Intact Insurance',
-    recurring: true,
-    frequency: 'quarterly',
-  },
-  {
-    id: '10',
-    date: '2024-02-25',
-    description: 'Business travel - Toronto conference',
-    category: 'travel',
-    type: 'expense',
-    amount: -1650,
-    vendor: 'Expedia',
-    recurring: false,
-  },
-];
 
 const categoryOptions = [
   { value: 'office', label: 'Office' },
@@ -160,6 +57,17 @@ const typeOptions = [
   { value: 'interest', label: 'Interest' },
 ];
 
+interface ModalFormData {
+  type: TransactionType;
+  category: string;
+  date: string;
+  description: string;
+  amount: number;
+  vendor: string;
+  is_recurring: boolean;
+  recurrence_frequency: string;
+}
+
 function TransactionModal({
   isOpen,
   onClose,
@@ -168,18 +76,33 @@ function TransactionModal({
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: Partial<Transaction>) => void;
+  onSubmit: (data: ModalFormData) => void;
   initialData?: Transaction;
 }) {
   const t = useTranslations('expenses');
   const commonT = useTranslations('common');
-  const [formData, setFormData] = useState<Partial<Transaction>>(
-    initialData || {
-      type: 'expense',
-      category: 'office',
-      date: new Date().toISOString().split('T')[0],
-      recurring: false,
-    }
+  const [formData, setFormData] = useState<ModalFormData>(
+    initialData
+      ? {
+          type: initialData.type,
+          category: initialData.category,
+          date: initialData.date,
+          description: initialData.description,
+          amount: initialData.amount,
+          vendor: initialData.vendor || '',
+          is_recurring: initialData.is_recurring,
+          recurrence_frequency: initialData.recurrence_frequency || '',
+        }
+      : {
+          type: 'expense',
+          category: 'office',
+          date: new Date().toISOString().split('T')[0],
+          description: '',
+          amount: 0,
+          vendor: '',
+          is_recurring: false,
+          recurrence_frequency: '',
+        }
   );
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -216,7 +139,7 @@ function TransactionModal({
           <Input
             label={commonT('date')}
             type="date"
-            value={formData.date || ''}
+            value={formData.date}
             onChange={(e) => setFormData({ ...formData, date: e.target.value })}
             required
           />
@@ -224,7 +147,7 @@ function TransactionModal({
 
         <Input
           label={commonT('description')}
-          value={formData.description || ''}
+          value={formData.description}
           onChange={(e) => setFormData({ ...formData, description: e.target.value })}
           required
         />
@@ -232,7 +155,7 @@ function TransactionModal({
         <div className="grid grid-cols-2 gap-4">
           <Select
             label={commonT('category')}
-            value={formData.category || ''}
+            value={formData.category}
             onChange={(value) => setFormData({ ...formData, category: value as string })}
             options={categoryOptions}
             required
@@ -241,7 +164,7 @@ function TransactionModal({
             label={commonT('amount')}
             type="number"
             step="0.01"
-            value={Math.abs(formData.amount || 0)}
+            value={Math.abs(formData.amount)}
             onChange={(e) =>
               setFormData({
                 ...formData,
@@ -260,7 +183,7 @@ function TransactionModal({
 
         <Input
           label="Vendor / Payer"
-          value={formData.vendor || ''}
+          value={formData.vendor}
           onChange={(e) => setFormData({ ...formData, vendor: e.target.value })}
         />
 
@@ -268,8 +191,8 @@ function TransactionModal({
           <input
             type="checkbox"
             id="recurring"
-            checked={formData.recurring || false}
-            onChange={(e) => setFormData({ ...formData, recurring: e.target.checked })}
+            checked={formData.is_recurring}
+            onChange={(e) => setFormData({ ...formData, is_recurring: e.target.checked })}
             className="w-4 h-4 text-tenir-600 rounded"
           />
           <label htmlFor="recurring" className="text-sm font-medium text-gray-700">
@@ -277,11 +200,11 @@ function TransactionModal({
           </label>
         </div>
 
-        {formData.recurring && (
+        {formData.is_recurring && (
           <Select
             label="Frequency"
-            value={formData.frequency || ''}
-            onChange={(value) => setFormData({ ...formData, frequency: value as any })}
+            value={formData.recurrence_frequency}
+            onChange={(value) => setFormData({ ...formData, recurrence_frequency: value as string })}
             options={[
               { value: 'monthly', label: t('monthly') },
               { value: 'quarterly', label: t('quarterly') },
@@ -336,11 +259,46 @@ function SummaryCard({
 export default function ExpensesPage() {
   const t = useTranslations('expenses');
   const commonT = useTranslations('common');
-  const [transactions, setTransactions] = useState<Transaction[]>(mockTransactions);
+  const supabase = createClient();
+  const { orgId, user, loading: orgLoading } = useOrganization();
+  const searchParams = useSearchParams();
+
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [txLoading, setTxLoading] = useState(false);
+  const [txError, setTxError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState<string>(() => searchParams.get('search') ?? '');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
+
+  // Sync searchQuery when the URL param changes (e.g. navigating from header search)
+  useEffect(() => {
+    const paramValue = searchParams.get('search') ?? '';
+    setSearchQuery(paramValue);
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!orgId) return;
+    async function fetchTransactions() {
+      setTxLoading(true);
+      setTxError(null);
+      try {
+        const { data, error } = await (supabase as any)
+          .from('transactions')
+          .select('*')
+          .eq('organization_id', orgId)
+          .order('date', { ascending: false });
+        if (error) throw error;
+        setTransactions(data || []);
+      } catch (e: any) {
+        setTxError(e.message);
+      } finally {
+        setTxLoading(false);
+      }
+    }
+    fetchTransactions();
+  }, [orgId]);
 
   const filteredTransactions = transactions.filter((tx) => {
     if (typeFilter !== 'all' && tx.type !== typeFilter) return false;
@@ -375,20 +333,48 @@ export default function ExpensesPage() {
     return { ...cat, amount };
   }).filter((cat) => cat.amount > 0);
 
-  const handleAddTransaction = (data: Partial<Transaction>) => {
-    const newTransaction: Transaction = {
-      id: Math.random().toString(36).substr(2, 9),
-      date: data.date || new Date().toISOString().split('T')[0],
-      description: data.description || '',
-      category: data.category || 'office',
-      type: data.type || 'expense',
-      amount: data.amount || 0,
-      vendor: data.vendor,
-      recurring: data.recurring || false,
-      frequency: data.frequency,
-    };
-    setTransactions([newTransaction, ...transactions]);
+  const handleAddTransaction = async (data: ModalFormData) => {
+    if (!orgId || !user) return;
+    try {
+      const insertData = {
+        organization_id: orgId,
+        type: data.type,
+        category: data.category,
+        date: data.date,
+        description: data.description,
+        amount: data.amount,
+        vendor: data.vendor || null,
+        is_recurring: data.is_recurring,
+        recurrence_frequency: data.recurrence_frequency || null,
+        currency: 'CAD',
+        created_by: user.id,
+      };
+      const { data: newTx, error } = await (supabase as any)
+        .from('transactions')
+        .insert(insertData)
+        .select()
+        .single();
+      if (error) throw error;
+      setTransactions([newTx, ...transactions]);
+    } catch (e: any) {
+      setTxError(e.message);
+    }
   };
+
+  const handleDeleteTransaction = async (id: string) => {
+    try {
+      const { error } = await (supabase as any)
+        .from('transactions')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      setTransactions(transactions.filter((tx) => tx.id !== id));
+    } catch (e: any) {
+      setTxError(e.message);
+    }
+  };
+
+  const isLoading = orgLoading || txLoading;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -396,6 +382,12 @@ export default function ExpensesPage() {
 
       <div className="flex-1 overflow-y-auto">
         <div className="p-6 lg:p-8">
+          {txError && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+              {txError}
+            </div>
+          )}
+
           {/* Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <SummaryCard
@@ -455,7 +447,16 @@ export default function ExpensesPage() {
                   onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
                 />
                 <div className="flex items-end">
-                  <Button variant="outline" fullWidth size="md">
+                  <Button
+                    variant="outline"
+                    fullWidth
+                    size="md"
+                    onClick={() => {
+                      setTypeFilter('all');
+                      setCategoryFilter('all');
+                      setDateRange({ start: '', end: '' });
+                    }}
+                  >
                     Clear filters
                   </Button>
                 </div>
@@ -469,6 +470,7 @@ export default function ExpensesPage() {
               variant="primary"
               icon={<Plus size={18} />}
               onClick={() => setIsModalOpen(true)}
+              disabled={!orgId}
             >
               {t('addTransaction')}
             </Button>
@@ -482,107 +484,120 @@ export default function ExpensesPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <Table hoverable>
-                <TableHeader>
-                  <TableRow isHeader>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead align="right">Amount</TableHead>
-                    <TableHead align="center">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredTransactions.length > 0 ? (
-                    filteredTransactions.map((tx) => (
-                      <TableRow key={tx.id}>
-                        <TableCell>{formatDate(tx.date)}</TableCell>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium text-gray-900">{tx.description}</p>
-                            {tx.vendor && (
-                              <p className="text-sm text-gray-600">{tx.vendor}</p>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>{tx.category}</TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              tx.type === 'expense'
-                                ? 'error'
-                                : tx.type === 'income'
-                                  ? 'success'
-                                  : 'info'
-                            }
-                            size="sm"
-                          >
-                            {tx.type === 'capital_gain' ? 'Capital gain' : tx.type}
-                          </Badge>
-                        </TableCell>
-                        <TableCell align="right">
-                          <span
-                            className={cn(
-                              'font-semibold',
-                              tx.amount < 0 ? 'text-red-600' : 'text-green-600'
-                            )}
-                          >
-                            {formatCurrency(tx.amount)}
-                          </span>
-                        </TableCell>
-                        <TableCell align="center">
-                          <div className="flex items-center justify-center gap-2">
-                            <button className="p-1 hover:bg-gray-100 rounded transition-colors">
-                              <Edit2 size={16} className="text-gray-600" />
-                            </button>
-                            <button className="p-1 hover:bg-red-50 rounded transition-colors">
-                              <Trash2 size={16} className="text-red-600" />
-                            </button>
-                          </div>
+              {isLoading ? (
+                <div className="text-center py-12 text-gray-500">Loading transactions...</div>
+              ) : (
+                <Table hoverable>
+                  <TableHeader>
+                    <TableRow isHeader>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead align="right">Amount</TableHead>
+                      <TableHead align="center">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredTransactions.length > 0 ? (
+                      filteredTransactions.map((tx) => (
+                        <TableRow key={tx.id}>
+                          <TableCell>{formatDate(tx.date)}</TableCell>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium text-gray-900">{tx.description}</p>
+                              {tx.vendor && (
+                                <p className="text-sm text-gray-600">{tx.vendor}</p>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>{tx.category}</TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                tx.type === 'expense'
+                                  ? 'error'
+                                  : tx.type === 'income'
+                                    ? 'success'
+                                    : 'info'
+                              }
+                              size="sm"
+                            >
+                              {tx.type === 'capital_gain' ? 'Capital gain' : tx.type}
+                            </Badge>
+                          </TableCell>
+                          <TableCell align="right">
+                            <span
+                              className={cn(
+                                'font-semibold',
+                                tx.amount < 0 ? 'text-red-600' : 'text-green-600'
+                              )}
+                            >
+                              {formatCurrency(tx.amount)}
+                            </span>
+                          </TableCell>
+                          <TableCell align="center">
+                            <div className="flex items-center justify-center gap-2">
+                              <button className="p-1 hover:bg-gray-100 rounded transition-colors">
+                                <Edit2 size={16} className="text-gray-600" />
+                              </button>
+                              <button
+                                className="p-1 hover:bg-red-50 rounded transition-colors"
+                                onClick={() => handleDeleteTransaction(tx.id)}
+                              >
+                                <Trash2 size={16} className="text-red-600" />
+                              </button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8">
+                          <p className="text-gray-600">
+                            {transactions.length === 0
+                              ? 'No transactions yet. Add your first transaction to get started.'
+                              : commonT('noResults')}
+                          </p>
                         </TableCell>
                       </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8">
-                        <p className="text-gray-600">{commonT('noResults')}</p>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                    )}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
 
           {/* Category Breakdown */}
-          <Card padding="md" shadow="sm">
-            <CardHeader>
-              <CardTitle level="h3">Category Breakdown</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {categoryBreakdown.map((cat) => (
-                  <div key={cat.value} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <span className="font-medium text-gray-900">{cat.label}</span>
-                    <div className="flex items-center gap-4">
-                      <div className="w-40 bg-gray-200 rounded-full h-2">
-                        <div
-                          className="bg-tenir-500 h-2 rounded-full transition-all"
-                          style={{
-                            width: `${(cat.amount / Math.max(...categoryBreakdown.map((c) => c.amount))) * 100}%`,
-                          }}
-                        />
+          {categoryBreakdown.length > 0 && (
+            <Card padding="md" shadow="sm">
+              <CardHeader>
+                <CardTitle level="h3">Category Breakdown</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {categoryBreakdown.map((cat) => (
+                    <div key={cat.value} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <span className="font-medium text-gray-900">{cat.label}</span>
+                      <div className="flex items-center gap-4">
+                        <div className="w-40 bg-gray-200 rounded-full h-2">
+                          <div
+                            className="bg-tenir-500 h-2 rounded-full transition-all"
+                            style={{
+                              width: `${(cat.amount / Math.max(...categoryBreakdown.map((c) => c.amount))) * 100}%`,
+                            }}
+                          />
+                        </div>
+                        <span className="font-semibold text-gray-900 w-24 text-right">
+                          {formatCurrency(cat.amount)}
+                        </span>
                       </div>
-                      <span className="font-semibold text-gray-900 w-24 text-right">
-                        {formatCurrency(cat.amount)}
-                      </span>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
 

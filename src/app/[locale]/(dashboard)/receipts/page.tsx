@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { useDropzone } from 'react-dropzone';
 import { formatCurrency, formatDate, cn } from '@/lib/utils';
@@ -11,107 +11,29 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Upload, CheckCircle, AlertCircle, Cloud, FileText } from 'lucide-react';
-
-interface ExtractedData {
-  vendor: string;
-  amount: number;
-  date: string;
-  gst: number;
-  qst: number;
-}
+import { createClient } from '@/lib/supabase/client';
+import { useOrganization } from '@/hooks/useOrganization';
 
 interface Receipt {
   id: string;
-  fileName: string;
-  vendor: string;
-  amount: number;
-  date: string;
+  organization_id: string;
+  uploaded_by: string | null;
+  file_path: string | null;
+  file_name: string | null;
+  vendor: string | null;
+  amount: number | null;
+  currency: string | null;
+  date: string | null;
+  gst_amount: number | null;
+  qst_amount: number | null;
+  tax_number: string | null;
+  category: string | null;
+  description: string | null;
   status: 'pending' | 'verified' | 'rejected';
-  extractedData?: ExtractedData;
-  uploadedAt: string;
-  thumbnail?: string;
+  ocr_data: any;
+  source: string | null;
+  created_at: string;
 }
-
-const mockReceipts: Receipt[] = [
-  {
-    id: '1',
-    fileName: 'staples_office_supplies.pdf',
-    vendor: 'Staples Canada',
-    amount: 245.67,
-    date: '2024-03-15',
-    status: 'verified',
-    extractedData: {
-      vendor: 'Staples Canada',
-      amount: 245.67,
-      date: '2024-03-15',
-      gst: 12.28,
-      qst: 17.12,
-    },
-    uploadedAt: '2024-03-16',
-    thumbnail: 'https://images.unsplash.com/photo-1532012197267-da84d127e765?w=100&h=100&fit=crop',
-  },
-  {
-    id: '2',
-    fileName: 'bell_internet_march.pdf',
-    vendor: 'Bell Canada',
-    amount: 89.99,
-    date: '2024-03-10',
-    status: 'verified',
-    extractedData: {
-      vendor: 'Bell Canada',
-      amount: 89.99,
-      date: '2024-03-10',
-      gst: 4.50,
-      qst: 6.30,
-    },
-    uploadedAt: '2024-03-11',
-    thumbnail: 'https://images.unsplash.com/photo-1633356284129-ce99ee4b4f0f?w=100&h=100&fit=crop',
-  },
-  {
-    id: '3',
-    fileName: 'uber_travel_march.jpg',
-    vendor: 'Uber',
-    amount: 156.42,
-    date: '2024-03-12',
-    status: 'pending',
-    extractedData: {
-      vendor: 'Uber',
-      amount: 156.42,
-      date: '2024-03-12',
-      gst: 7.82,
-      qst: 10.95,
-    },
-    uploadedAt: '2024-03-13',
-    thumbnail: 'https://images.unsplash.com/photo-1583394838336-acd977736f90?w=100&h=100&fit=crop',
-  },
-  {
-    id: '4',
-    fileName: 'aws_subscription.png',
-    vendor: 'Amazon Web Services',
-    amount: 342.15,
-    date: '2024-03-01',
-    status: 'rejected',
-    uploadedAt: '2024-03-02',
-    thumbnail: 'https://images.unsplash.com/photo-1526374965328-7f5ae4e8ac1e?w=100&h=100&fit=crop',
-  },
-  {
-    id: '5',
-    fileName: 'co_working_space.pdf',
-    vendor: 'WeWork',
-    amount: 1200.00,
-    date: '2024-03-01',
-    status: 'verified',
-    extractedData: {
-      vendor: 'WeWork',
-      amount: 1200.00,
-      date: '2024-03-01',
-      gst: 60.00,
-      qst: 84.00,
-    },
-    uploadedAt: '2024-03-02',
-    thumbnail: 'https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=100&h=100&fit=crop',
-  },
-];
 
 function ReceiptCard({ receipt }: { receipt: Receipt }) {
   const t = useTranslations('receipts');
@@ -122,26 +44,27 @@ function ReceiptCard({ receipt }: { receipt: Receipt }) {
     rejected: { variant: 'error' as const, icon: AlertCircle, label: t('rejected') },
   };
 
-  const config = statusConfig[receipt.status];
+  const config = statusConfig[receipt.status] || statusConfig.pending;
   const StatusIcon = config.icon;
+
+  const displayName = receipt.file_name || 'Unknown file';
+  const displayVendor = receipt.vendor || 'Unknown Vendor';
+  const displayAmount = receipt.amount ?? 0;
+  const displayDate = receipt.date || receipt.created_at?.split('T')[0] || '';
 
   return (
     <Card shadow="sm" interactive className="overflow-hidden flex flex-col">
-      {/* Thumbnail */}
-      <div className="w-full h-40 bg-gray-100 overflow-hidden">
-        <img
-          src={receipt.thumbnail || 'https://images.unsplash.com/photo-1493857671505-72967e2e2760?w=200&h=160&fit=crop'}
-          alt={receipt.fileName}
-          className="w-full h-full object-cover"
-        />
+      {/* Icon placeholder instead of image */}
+      <div className="w-full h-40 bg-gray-100 overflow-hidden flex items-center justify-center">
+        <FileText size={48} className="text-gray-400" />
       </div>
 
       {/* Content */}
       <div className="p-4 flex-1 flex flex-col">
         <div className="flex items-start justify-between mb-3">
           <div className="flex-1">
-            <p className="text-sm text-gray-600 truncate">{receipt.fileName}</p>
-            <p className="text-lg font-semibold text-gray-900 mt-1">{receipt.vendor}</p>
+            <p className="text-sm text-gray-600 truncate">{displayName}</p>
+            <p className="text-lg font-semibold text-gray-900 mt-1">{displayVendor}</p>
           </div>
           <Badge variant={config.variant} size="sm" className="ml-2">
             {config.label}
@@ -150,23 +73,27 @@ function ReceiptCard({ receipt }: { receipt: Receipt }) {
 
         <div className="mb-4 flex-1">
           <p className="text-2xl font-bold text-gray-900 mb-1">
-            {formatCurrency(receipt.amount)}
+            {formatCurrency(displayAmount)}
           </p>
-          <p className="text-sm text-gray-600">{formatDate(receipt.date)}</p>
+          {displayDate && <p className="text-sm text-gray-600">{formatDate(displayDate)}</p>}
         </div>
 
-        {receipt.extractedData && (
+        {(receipt.gst_amount != null || receipt.qst_amount != null) && (
           <div className="mb-4 p-3 bg-gray-50 rounded-lg">
             <p className="text-xs font-medium text-gray-600 mb-2">Extracted</p>
             <div className="space-y-1 text-xs">
-              <div className="flex justify-between">
-                <span className="text-gray-600">GST:</span>
-                <span className="font-medium text-gray-900">{formatCurrency(receipt.extractedData.gst)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">QST:</span>
-                <span className="font-medium text-gray-900">{formatCurrency(receipt.extractedData.qst)}</span>
-              </div>
+              {receipt.gst_amount != null && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">GST:</span>
+                  <span className="font-medium text-gray-900">{formatCurrency(receipt.gst_amount)}</span>
+                </div>
+              )}
+              {receipt.qst_amount != null && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">QST:</span>
+                  <span className="font-medium text-gray-900">{formatCurrency(receipt.qst_amount)}</span>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -175,58 +102,105 @@ function ReceiptCard({ receipt }: { receipt: Receipt }) {
           <Button variant="outline" size="sm" fullWidth>
             View
           </Button>
-          <Button variant="ghost" size="sm" fullWidth>
-            Delete
-          </Button>
         </div>
       </div>
     </Card>
   );
 }
 
-function DropzoneArea() {
+function DropzoneArea({
+  orgId,
+  userId,
+  onUploaded,
+}: {
+  orgId: string;
+  userId: string;
+  onUploaded: () => void;
+}) {
   const t = useTranslations('receipts');
-  const [uploadedReceipts, setUploadedReceipts] = useState<Receipt[]>([]);
+  const supabase = createClient();
+  const [uploadQueue, setUploadQueue] = useState<
+    { id: string; name: string; status: 'uploading' | 'processing' | 'done' | 'error' }[]
+  >([]);
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    // Simulate processing
-    acceptedFiles.forEach((file) => {
-      const newReceipt: Receipt = {
-        id: Math.random().toString(36).substr(2, 9),
-        fileName: file.name,
-        vendor: 'Unknown Vendor',
-        amount: 0,
-        date: new Date().toISOString().split('T')[0],
-        status: 'pending',
-        uploadedAt: new Date().toISOString().split('T')[0],
-      };
+  const onDrop = useCallback(
+    async (acceptedFiles: File[]) => {
+      for (const file of acceptedFiles) {
+        const tempId = Math.random().toString(36).substr(2, 9);
 
-      // Simulate processing delay
-      setTimeout(() => {
-        setUploadedReceipts((prev) =>
-          prev.map((r) =>
-            r.id === newReceipt.id
-              ? {
-                  ...r,
-                  status: 'verified',
-                  vendor: `${file.name.split('_')[0].charAt(0).toUpperCase()}${file.name.split('_')[0].slice(1)}`,
-                  amount: Math.random() * 500 + 50,
-                  extractedData: {
-                    vendor: `${file.name.split('_')[0].charAt(0).toUpperCase()}${file.name.split('_')[0].slice(1)}`,
-                    amount: Math.random() * 500 + 50,
-                    date: new Date().toISOString().split('T')[0],
-                    gst: Math.random() * 50,
-                    qst: Math.random() * 50,
-                  },
-                }
-              : r
-          )
-        );
-      }, 1500);
+        setUploadQueue((prev) => [
+          ...prev,
+          { id: tempId, name: file.name, status: 'uploading' },
+        ]);
 
-      setUploadedReceipts((prev) => [...prev, newReceipt]);
-    });
-  }, []);
+        try {
+          // 1. Upload to Supabase Storage
+          const storagePath = `${orgId}/${Date.now()}_${file.name}`;
+          const { data: storageData, error: storageError } = await supabase.storage
+            .from('receipts')
+            .upload(storagePath, file);
+
+          if (storageError) throw storageError;
+
+          setUploadQueue((prev) =>
+            prev.map((q) => (q.id === tempId ? { ...q, status: 'processing' } : q))
+          );
+
+          // 2. Try OCR API
+          let ocrResult: any = null;
+          try {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('orgId', orgId);
+            const ocrResponse = await fetch('/api/receipts/ocr', {
+              method: 'POST',
+              body: formData,
+            });
+            if (ocrResponse.ok) {
+              ocrResult = await ocrResponse.json();
+            }
+          } catch {
+            // OCR failed — continue with null values
+          }
+
+          // 3. Insert into receipts table
+          const { error: insertError } = await (supabase as any)
+            .from('receipts')
+            .insert({
+              organization_id: orgId,
+              uploaded_by: userId,
+              file_path: storageData?.path || storagePath,
+              file_name: file.name,
+              vendor: ocrResult?.vendor || null,
+              amount: ocrResult?.amount || null,
+              currency: ocrResult?.currency || 'CAD',
+              date: ocrResult?.date || null,
+              gst_amount: ocrResult?.gst_amount || null,
+              qst_amount: ocrResult?.qst_amount || null,
+              tax_number: ocrResult?.tax_number || null,
+              category: ocrResult?.category || null,
+              description: ocrResult?.description || null,
+              status: ocrResult ? 'verified' : 'pending',
+              ocr_data: ocrResult || null,
+              source: 'upload',
+            });
+
+          if (insertError) throw insertError;
+
+          setUploadQueue((prev) =>
+            prev.map((q) => (q.id === tempId ? { ...q, status: 'done' } : q))
+          );
+
+          onUploaded();
+        } catch (e: any) {
+          setUploadQueue((prev) =>
+            prev.map((q) => (q.id === tempId ? { ...q, status: 'error' } : q))
+          );
+        }
+      }
+    },
+    [orgId, userId, onUploaded]
+  );
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -259,30 +233,36 @@ function DropzoneArea() {
       <p className="text-sm text-gray-600 mb-3">{t('uploadDescription')}</p>
       <p className="text-xs text-gray-500">{t('supportedFormats')}</p>
 
-      {uploadedReceipts.length > 0 && (
+      {uploadQueue.length > 0 && (
         <div className="mt-6 pt-6 border-t border-gray-200">
           <p className="text-sm font-medium text-gray-700 mb-3">
-            {uploadedReceipts.length} receipt{uploadedReceipts.length !== 1 ? 's' : ''} uploaded
+            {uploadQueue.length} receipt{uploadQueue.length !== 1 ? 's' : ''} uploaded
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-60 overflow-y-auto">
-            {uploadedReceipts.map((receipt) => (
+            {uploadQueue.map((item) => (
               <div
-                key={receipt.id}
+                key={item.id}
                 className="p-3 bg-gray-50 rounded-lg border border-gray-200 flex items-center justify-between"
               >
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{receipt.fileName}</p>
+                  <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
                   <div className="flex items-center gap-2 mt-1">
-                    {receipt.status === 'pending' && (
+                    {(item.status === 'uploading' || item.status === 'processing') && (
                       <div className="inline-flex items-center gap-1">
                         <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
                         <span className="text-xs text-yellow-700">{t('processing')}</span>
                       </div>
                     )}
-                    {receipt.status === 'verified' && (
+                    {item.status === 'done' && (
                       <span className="text-xs text-green-700 flex items-center gap-1">
                         <CheckCircle size={12} />
                         {t('verified')}
+                      </span>
+                    )}
+                    {item.status === 'error' && (
+                      <span className="text-xs text-red-700 flex items-center gap-1">
+                        <AlertCircle size={12} />
+                        Error
                       </span>
                     )}
                   </div>
@@ -299,20 +279,61 @@ function DropzoneArea() {
 export default function ReceiptsPage() {
   const t = useTranslations('receipts');
   const commonT = useTranslations('common');
+  const { orgId, user, loading: orgLoading } = useOrganization();
+  const supabase = createClient();
+
+  const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [dataLoading, setDataLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
 
-  const allReceipts = mockReceipts;
+  useEffect(() => {
+    if (!orgId) return;
+    fetchReceipts();
+  }, [orgId]);
 
-  const filteredReceipts = allReceipts.filter((receipt) => {
+  async function fetchReceipts() {
+    setDataLoading(true);
+    try {
+      const { data, error } = await (supabase as any)
+        .from('receipts')
+        .select('*')
+        .eq('organization_id', orgId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setReceipts(data || []);
+    } catch (e: any) {
+      // silently fail — show empty state
+      setReceipts([]);
+    } finally {
+      setDataLoading(false);
+    }
+  }
+
+  const filteredReceipts = receipts.filter((receipt) => {
     if (statusFilter !== 'all' && receipt.status !== statusFilter) return false;
-    if (dateRange.start && receipt.date < dateRange.start) return false;
-    if (dateRange.end && receipt.date > dateRange.end) return false;
+    const receiptDate = receipt.date || receipt.created_at?.split('T')[0] || '';
+    if (dateRange.start && receiptDate < dateRange.start) return false;
+    if (dateRange.end && receiptDate > dateRange.end) return false;
     return true;
   });
 
-  const totalAmount = filteredReceipts.reduce((sum, r) => sum + r.amount, 0);
+  const totalAmount = filteredReceipts.reduce((sum, r) => sum + (r.amount ?? 0), 0);
   const verifiedCount = filteredReceipts.filter((r) => r.status === 'verified').length;
+
+  const isLoading = orgLoading || dataLoading;
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col h-full overflow-hidden">
+        <Header title={t('title')} />
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-gray-500">{commonT('loading')}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -322,7 +343,18 @@ export default function ReceiptsPage() {
         <div className="p-6 lg:p-8">
           {/* Upload Zone */}
           <div className="mb-8">
-            <DropzoneArea />
+            {orgId && user ? (
+              <DropzoneArea
+                orgId={orgId}
+                userId={user.id}
+                onUploaded={fetchReceipts}
+              />
+            ) : (
+              <div className="border-2 border-dashed rounded-lg p-12 text-center border-gray-300">
+                <Cloud size={48} className="mx-auto mb-4 text-gray-400" />
+                <p className="text-sm text-gray-600">{t('upload')}</p>
+              </div>
+            )}
           </div>
 
           {/* Quick Actions */}

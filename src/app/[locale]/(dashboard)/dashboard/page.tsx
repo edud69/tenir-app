@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { formatCurrency } from '@/lib/utils';
 import Header from '@/components/layout/header';
@@ -24,6 +24,8 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
 } from 'lucide-react';
+import { useOrganization } from '@/hooks/useOrganization';
+import { createClient } from '@/lib/supabase/client';
 
 interface StatCardProps {
   title: string;
@@ -69,76 +71,83 @@ function StatCard({
   );
 }
 
-interface Transaction {
+interface DbTransaction {
   id: string;
   description: string;
   category: string;
   amount: number;
   date: string;
-  status: 'completed' | 'pending' | 'failed';
+  type: string;
 }
 
-function TransactionTable({ transactions }: { transactions: Transaction[] }) {
+function TransactionTable({ transactions }: { transactions: DbTransaction[] }) {
   return (
     <Card padding="md" shadow="sm">
       <CardHeader>
         <CardTitle level="h3">Recent Transactions</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200">
-                <th className="text-left py-3 px-4 font-medium text-gray-700">
-                  Description
-                </th>
-                <th className="text-left py-3 px-4 font-medium text-gray-700">
-                  Category
-                </th>
-                <th className="text-right py-3 px-4 font-medium text-gray-700">
-                  Amount
-                </th>
-                <th className="text-left py-3 px-4 font-medium text-gray-700">
-                  Date
-                </th>
-                <th className="text-center py-3 px-4 font-medium text-gray-700">
-                  Status
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {transactions.map((transaction) => (
-                <tr
-                  key={transaction.id}
-                  className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
-                >
-                  <td className="py-3 px-4 text-gray-900">
-                    {transaction.description}
-                  </td>
-                  <td className="py-3 px-4 text-gray-600">{transaction.category}</td>
-                  <td className="py-3 px-4 text-right font-medium text-gray-900">
-                    {transaction.amount >= 0 ? '+' : ''}
-                    {formatCurrency(transaction.amount)}
-                  </td>
-                  <td className="py-3 px-4 text-gray-600">{transaction.date}</td>
-                  <td className="py-3 px-4 text-center">
-                    <span
-                      className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
-                        transaction.status === 'completed'
-                          ? 'bg-green-100 text-green-700'
-                          : transaction.status === 'pending'
-                            ? 'bg-yellow-100 text-yellow-700'
-                            : 'bg-red-100 text-red-700'
-                      }`}
-                    >
-                      {transaction.status}
-                    </span>
-                  </td>
+        {transactions.length === 0 ? (
+          <p className="text-gray-500 text-sm py-4 text-center">
+            No transactions yet. Add your first transaction in the Expenses page.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-3 px-4 font-medium text-gray-700">
+                    Description
+                  </th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-700">
+                    Category
+                  </th>
+                  <th className="text-right py-3 px-4 font-medium text-gray-700">
+                    Amount
+                  </th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-700">
+                    Date
+                  </th>
+                  <th className="text-center py-3 px-4 font-medium text-gray-700">
+                    Type
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {transactions.map((transaction) => (
+                  <tr
+                    key={transaction.id}
+                    className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
+                  >
+                    <td className="py-3 px-4 text-gray-900">
+                      {transaction.description}
+                    </td>
+                    <td className="py-3 px-4 text-gray-600">{transaction.category}</td>
+                    <td className="py-3 px-4 text-right font-medium text-gray-900">
+                      {transaction.amount >= 0 ? '+' : ''}
+                      {formatCurrency(transaction.amount)}
+                    </td>
+                    <td className="py-3 px-4 text-gray-600">{transaction.date}</td>
+                    <td className="py-3 px-4 text-center">
+                      <span
+                        className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${
+                          transaction.type === 'income' ||
+                          transaction.type === 'dividend' ||
+                          transaction.type === 'capital_gain' ||
+                          transaction.type === 'interest'
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-red-100 text-red-700'
+                        }`}
+                      >
+                        {transaction.type === 'capital_gain' ? 'Capital gain' : transaction.type}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -157,91 +166,101 @@ function ExpenseChart({ data }: { data: ChartData[] }) {
         <CardTitle level="h3">Monthly Overview</CardTitle>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="month" />
-            <YAxis />
-            <Tooltip formatter={(value) => formatCurrency(value as number)} />
-            <Legend />
-            <Bar dataKey="expenses" fill="#d946ef" name="Expenses" />
-            <Bar dataKey="revenue" fill="#0c8ee9" name="Revenue" />
-          </BarChart>
-        </ResponsiveContainer>
+        {data.length === 0 ? (
+          <div className="flex items-center justify-center h-[300px] text-gray-500 text-sm">
+            Add transactions to see your chart
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="month" />
+              <YAxis />
+              <Tooltip formatter={(value) => formatCurrency(value as number)} />
+              <Legend />
+              <Bar dataKey="expenses" fill="#d946ef" name="Expenses" />
+              <Bar dataKey="revenue" fill="#0c8ee9" name="Revenue" />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
       </CardContent>
     </Card>
   );
 }
 
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function buildChartData(transactions: DbTransaction[]): ChartData[] {
+  const byMonth: Record<string, { expenses: number; revenue: number }> = {};
+  for (const tx of transactions) {
+    const month = MONTH_LABELS[new Date(tx.date).getMonth()];
+    if (!byMonth[month]) byMonth[month] = { expenses: 0, revenue: 0 };
+    if (tx.type === 'expense') {
+      byMonth[month].expenses += Math.abs(tx.amount);
+    } else {
+      byMonth[month].revenue += tx.amount;
+    }
+  }
+  // Return months in order as they appear
+  const orderedMonths = MONTH_LABELS.filter((m) => byMonth[m]);
+  return orderedMonths.map((month) => ({ month, ...byMonth[month] }));
+}
+
 export default function DashboardPage() {
   const t = useTranslations('dashboard');
-  const commonT = useTranslations('common');
+  const supabase = createClient();
+  const { org, orgId, user, loading: orgLoading } = useOrganization();
 
-  // Mock data - replace with real data from API
-  const totalRevenue = 125500;
-  const totalExpenses = 45200;
+  const [transactions, setTransactions] = useState<DbTransaction[]>([]);
+  const [txLoading, setTxLoading] = useState(false);
+
+  useEffect(() => {
+    if (!orgId) return;
+    async function fetchTransactions() {
+      setTxLoading(true);
+      try {
+        const { data, error } = await (supabase as any)
+          .from('transactions')
+          .select('id, description, category, amount, date, type')
+          .eq('organization_id', orgId)
+          .order('date', { ascending: false })
+          .limit(10);
+        if (!error && data) setTransactions(data);
+      } finally {
+        setTxLoading(false);
+      }
+    }
+    fetchTransactions();
+  }, [orgId]);
+
+  // Fetch all transactions for chart/totals (no limit)
+  const [allTransactions, setAllTransactions] = useState<DbTransaction[]>([]);
+  useEffect(() => {
+    if (!orgId) return;
+    async function fetchAll() {
+      const { data, error } = await (supabase as any)
+        .from('transactions')
+        .select('id, amount, type, date, category')
+        .eq('organization_id', orgId);
+      if (!error && data) setAllTransactions(data);
+    }
+    fetchAll();
+  }, [orgId]);
+
+  const totalRevenue = allTransactions
+    .filter((tx) => ['income', 'dividend', 'capital_gain', 'interest'].includes(tx.type))
+    .reduce((sum, tx) => sum + tx.amount, 0);
+
+  const totalExpenses = allTransactions
+    .filter((tx) => tx.type === 'expense')
+    .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+
   const netIncome = totalRevenue - totalExpenses;
-  const estimatedTax = netIncome * 0.26; // Approximate Canadian corporate tax rate
+  const estimatedTax = netIncome > 0 ? netIncome * 0.26 : 0;
 
-  const mockTransactions: Transaction[] = [
-    {
-      id: '1',
-      description: 'Office Supplies',
-      category: 'Supplies',
-      amount: -350,
-      date: '2024-03-28',
-      status: 'completed',
-    },
-    {
-      id: '2',
-      description: 'Client Payment',
-      category: 'Income',
-      amount: 5000,
-      date: '2024-03-27',
-      status: 'completed',
-    },
-    {
-      id: '3',
-      description: 'Internet Service',
-      category: 'Office',
-      amount: -85,
-      date: '2024-03-25',
-      status: 'completed',
-    },
-    {
-      id: '4',
-      description: 'Professional Services',
-      category: 'Professional',
-      amount: -1200,
-      date: '2024-03-24',
-      status: 'pending',
-    },
-    {
-      id: '5',
-      description: 'Travel Expenses',
-      category: 'Travel',
-      amount: -450,
-      date: '2024-03-22',
-      status: 'completed',
-    },
-    {
-      id: '6',
-      description: 'Equipment Purchase',
-      category: 'Technology',
-      amount: -2500,
-      date: '2024-03-20',
-      status: 'completed',
-    },
-  ];
+  const chartData = buildChartData(allTransactions);
 
-  const chartData: ChartData[] = [
-    { month: 'Jan', expenses: 12000, revenue: 28000 },
-    { month: 'Feb', expenses: 15000, revenue: 32000 },
-    { month: 'Mar', expenses: 18000, revenue: 35000 },
-    { month: 'Apr', expenses: 16000, revenue: 30000 },
-    { month: 'May', expenses: 20000, revenue: 38000 },
-    { month: 'Jun', expenses: 19000, revenue: 36000 },
-  ];
+  const displayName = user?.user_metadata?.full_name || user?.email || 'there';
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -252,7 +271,7 @@ export default function DashboardPage() {
           {/* Welcome Section */}
           <div className="mb-8">
             <h2 className="text-3xl font-bold text-gray-900">
-              {t('welcome', { name: 'John' })}
+              {t('welcome', { name: org?.name || displayName })}
             </h2>
             <p className="text-gray-600 mt-2">
               Here's an overview of your financial activity for this fiscal year.
@@ -264,30 +283,26 @@ export default function DashboardPage() {
             <StatCard
               title={t('totalRevenue')}
               value={formatCurrency(totalRevenue)}
-              change="+12.5%"
-              isPositive={true}
               icon={<TrendingUp size={24} />}
+              isPositive={true}
             />
             <StatCard
               title={t('totalExpenses')}
               value={formatCurrency(totalExpenses)}
-              change="-2.3%"
-              isPositive={true}
               icon={<Upload size={24} />}
+              isPositive={false}
             />
             <StatCard
               title={t('netIncome')}
               value={formatCurrency(netIncome)}
-              change="+18.2%"
-              isPositive={true}
               icon={<ArrowUpRight size={24} />}
+              isPositive={netIncome >= 0}
             />
             <StatCard
               title={t('estimatedTax')}
               value={formatCurrency(estimatedTax)}
-              change="+5.1%"
-              isPositive={false}
               icon={<FileText size={24} />}
+              isPositive={false}
             />
           </div>
 
@@ -343,7 +358,7 @@ export default function DashboardPage() {
                     <div className="flex justify-between items-center">
                       <span className="text-gray-600">Avg. Monthly</span>
                       <span className="font-semibold text-gray-900">
-                        {formatCurrency(totalExpenses / 6)}
+                        {formatCurrency(chartData.length > 0 ? totalExpenses / chartData.length : 0)}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
@@ -352,15 +367,9 @@ export default function DashboardPage() {
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-gray-600">YTD Margin</span>
-                      <span className="font-semibold text-green-600">64%</span>
-                    </div>
-                    <div className="border-t border-gray-200 pt-4">
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-600">Runway</span>
-                        <span className="font-semibold text-gray-900">
-                          8.2 months
-                        </span>
-                      </div>
+                      <span className={`font-semibold ${netIncome >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {totalRevenue > 0 ? `${Math.round((netIncome / totalRevenue) * 100)}%` : '—'}
+                      </span>
                     </div>
                   </div>
                 </CardContent>
@@ -369,7 +378,15 @@ export default function DashboardPage() {
           </div>
 
           {/* Recent Transactions */}
-          <TransactionTable transactions={mockTransactions} />
+          {(orgLoading || txLoading) ? (
+            <Card padding="md" shadow="sm">
+              <CardContent>
+                <p className="text-gray-500 text-sm py-4 text-center">Loading transactions...</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <TransactionTable transactions={transactions} />
+          )}
         </div>
       </div>
     </div>
