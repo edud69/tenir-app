@@ -86,56 +86,42 @@ export default function SignupPage() {
     setIsLoading(true);
 
     try {
-      // Create Supabase user
-      const { data: authData, error: signUpError } =
-        await supabase.auth.signUp({
+      // Create user + org via server API (bypasses RLS)
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           email: formData.email,
           password: formData.password,
-        });
+          companyName: formData.companyName,
+          neq: formData.neq,
+          fiscalYearEnd: formData.fiscalYearEnd,
+        }),
+      });
 
-      if (signUpError || !authData.user) {
-        setError(signUpError?.message || 'Failed to create account');
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Failed to create account');
         setIsLoading(false);
         return;
       }
 
-      const userId = authData.user.id;
+      // Sign in the newly created user
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password,
+      });
 
-      // Create organization
-      const { data: orgData, error: orgError } = await (supabase as any)
-        .from('organizations')
-        .insert({
-          name: formData.companyName,
-          neq: formData.neq || null,
-          fiscal_year_end: formData.fiscalYearEnd,
-        })
-        .select('id')
-        .single();
-
-      if (orgError || !orgData) {
-        setError('Failed to create organization');
-        setIsLoading(false);
-        return;
-      }
-
-      // Create organization membership
-      const { error: memberError } = await (supabase as any)
-        .from('organization_members')
-        .insert({
-          organization_id: orgData.id,
-          user_id: userId,
-          role: 'owner',
-        });
-
-      if (memberError) {
-        setError('Failed to set up organization membership');
+      if (signInError) {
+        setError(signInError.message);
         setIsLoading(false);
         return;
       }
 
       // Redirect to dashboard
-      router.push('/dashboard');
-    } catch (err) {
+      router.push('/fr/dashboard');
+    } catch {
       setError('An unexpected error occurred. Please try again.');
       setIsLoading(false);
     }
