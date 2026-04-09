@@ -259,6 +259,17 @@
     "generatedOn": "Généré le",
     "noHistory": "Aucun historique de soumission."
   },
+  "notifications": {
+    "title": "Notifications",
+    "recent": "récentes",
+    "empty": "Aucune activité récente",
+    "unknownReceipt": "Reçu sans titre",
+    "receiptVerified": "Reçu vérifié avec succès",
+    "receiptPending": "Reçu en attente de vérification",
+    "formAccepted": "Formulaire accepté",
+    "formSubmitted": "Formulaire soumis",
+    "formDraft": "Formulaire en brouillon"
+  },
   "assistant": {
     "title": "Assistant IA",
     "placeholder": "Posez une question sur votre comptabilité...",
