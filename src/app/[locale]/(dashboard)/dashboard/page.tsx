@@ -6,13 +6,12 @@ import { useRouter, usePathname } from 'next/navigation';
 import { formatCurrency } from '@/lib/utils';
 import Header from '@/components/layout/header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import {
   ArrowUpRight, ArrowDownRight, TrendingUp, FileText,
-  Receipt, Plus, ChevronRight, Minus,
+  Receipt, Plus, ChevronRight, TrendingDown,
 } from 'lucide-react';
 import { useOrganization } from '@/hooks/useOrganization';
 import { createClient } from '@/lib/supabase/client';
@@ -44,6 +43,23 @@ function buildChartData(transactions: DbTransaction[], locale: string) {
 
 const isIncome = (type: string) => ['income', 'dividend', 'capital_gain', 'interest'].includes(type);
 
+// Custom chart tooltip
+function ChartTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-white border border-gray-100 rounded-xl shadow-lg shadow-gray-200/60 px-3.5 py-2.5 text-xs">
+      <p className="font-semibold text-gray-600 mb-1.5">{label}</p>
+      {payload.map((p: any) => (
+        <div key={p.dataKey} className="flex items-center gap-2 leading-relaxed">
+          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: p.stroke }} />
+          <span className="text-gray-500">{p.name}:</span>
+          <span className="font-semibold text-gray-900">{formatCurrency(p.value)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const t = useTranslations('dashboard');
   const tExp = useTranslations('expenses');
@@ -74,7 +90,9 @@ export default function DashboardPage() {
   const totalExpenses = allTx.filter((tx) => tx.type === 'expense').reduce((s, tx) => s + Math.abs(tx.amount), 0);
   const netIncome     = totalRevenue - totalExpenses;
   const estimatedTax  = netIncome > 0 ? netIncome * 0.265 : 0;
+  const margin        = totalRevenue > 0 ? Math.round((netIncome / totalRevenue) * 100) : null;
   const chartData     = buildChartData(allTx, locale);
+  const avgMonthly    = chartData.length > 0 ? totalExpenses / chartData.length : 0;
 
   const displayName = org?.name || user?.email?.split('@')[0] || '';
 
@@ -86,15 +104,16 @@ export default function DashboardPage() {
     return map[type] || type;
   };
 
-  const statCards = [
+  const kpis = [
     {
       title: t('totalRevenue'),
       value: formatCurrency(totalRevenue),
       icon: ArrowUpRight,
       iconBg: 'bg-emerald-50',
       iconColor: 'text-emerald-600',
-      valueColor: 'text-emerald-700',
-      trend: null,
+      accent: 'border-l-emerald-400',
+      subLabel: 'YTD',
+      subValue: null,
     },
     {
       title: t('totalExpenses'),
@@ -102,62 +121,82 @@ export default function DashboardPage() {
       icon: ArrowDownRight,
       iconBg: 'bg-red-50',
       iconColor: 'text-red-500',
-      valueColor: 'text-red-600',
-      trend: null,
+      accent: 'border-l-red-400',
+      subLabel: t('avgMonthly'),
+      subValue: formatCurrency(avgMonthly),
     },
     {
       title: t('netIncome'),
       value: formatCurrency(netIncome),
-      icon: netIncome >= 0 ? TrendingUp : Minus,
+      icon: netIncome >= 0 ? TrendingUp : TrendingDown,
       iconBg: netIncome >= 0 ? 'bg-tenir-50' : 'bg-red-50',
       iconColor: netIncome >= 0 ? 'text-tenir-600' : 'text-red-500',
-      valueColor: netIncome >= 0 ? 'text-tenir-700' : 'text-red-600',
-      trend: null,
+      accent: netIncome >= 0 ? 'border-l-tenir-400' : 'border-l-red-400',
+      subLabel: 'Margin',
+      subValue: margin !== null ? `${margin}%` : null,
     },
     {
       title: t('estimatedTax'),
       value: formatCurrency(estimatedTax),
       icon: FileText,
       iconBg: 'bg-amber-50',
-      iconColor: 'text-amber-600',
-      valueColor: 'text-amber-700',
-      trend: null,
+      iconColor: 'text-amber-500',
+      accent: 'border-l-amber-400',
+      subLabel: 'Rate',
+      subValue: '26.5%',
     },
+  ];
+
+  const quickActions = [
+    { label: t('uploadReceipt'), icon: Receipt,    href: `/${locale}/receipts` },
+    { label: t('addExpense'),    icon: Plus,        href: `/${locale}/expenses` },
+    { label: t('viewTaxes'),     icon: TrendingUp,  href: `/${locale}/taxes` },
+    { label: t('generateForm'),  icon: FileText,    href: `/${locale}/forms` },
   ];
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <Header title={t('overview')} />
-      <div className="flex-1 overflow-y-auto bg-gray-50/50">
+      <div className="flex-1 overflow-y-auto bg-gray-50/40">
         <div className="p-6 lg:p-8 max-w-7xl mx-auto">
 
-          {/* Welcome banner */}
-          <div className="mb-8 flex items-center justify-between">
+          {/* Welcome */}
+          <div className="mb-7 flex items-center justify-between gap-4">
             <div>
               <h2 className="text-2xl font-bold text-gray-900 tracking-tight">
                 {t('welcome', { name: displayName })}
               </h2>
-              <p className="text-sm text-gray-500 mt-1">{t('overviewSubtitle')}</p>
+              <p className="text-sm text-gray-400 mt-1">{t('overviewSubtitle')}</p>
             </div>
-            <div className="hidden sm:flex items-center gap-2 text-xs text-gray-400 bg-white border border-gray-100 rounded-xl px-3 py-2 shadow-sm">
-              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              {new Date().toLocaleDateString(locale === 'fr' ? 'fr-CA' : 'en-CA', { weekday: 'short', month: 'short', day: 'numeric' })}
+            <div className="hidden sm:flex items-center gap-2 text-xs font-medium text-gray-400 bg-white border border-gray-100 rounded-xl px-3 py-2 shadow-sm whitespace-nowrap">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              {new Date().toLocaleDateString(locale === 'fr' ? 'fr-CA' : 'en-CA', {
+                weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+              })}
             </div>
           </div>
 
-          {/* Stat cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            {statCards.map((card) => {
-              const Icon = card.icon;
+          {/* KPI cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+            {kpis.map((kpi) => {
+              const Icon = kpi.icon;
               return (
-                <div key={card.title} className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm shadow-gray-100">
-                  <div className="flex items-start justify-between mb-3">
-                    <p className="text-xs font-medium text-gray-500 leading-tight">{card.title}</p>
-                    <span className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${card.iconBg} ${card.iconColor}`}>
-                      <Icon size={16} />
+                <div
+                  key={kpi.title}
+                  className={`bg-white rounded-2xl border border-gray-100 border-l-4 ${kpi.accent} p-5 shadow-sm shadow-gray-50`}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-medium text-gray-400 leading-tight truncate pr-1">{kpi.title}</p>
+                    <span className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${kpi.iconBg} ${kpi.iconColor}`}>
+                      <Icon size={14} />
                     </span>
                   </div>
-                  <p className={`text-2xl font-bold tracking-tight ${card.valueColor}`}>{card.value}</p>
+                  <p className="text-xl font-bold text-gray-900 tracking-tight mb-2">{kpi.value}</p>
+                  {kpi.subValue && (
+                    <p className="text-xs text-gray-400">
+                      {kpi.subLabel}: <span className="font-semibold text-gray-600">{kpi.subValue}</span>
+                    </p>
+                  )}
                 </div>
               );
             })}
@@ -166,106 +205,108 @@ export default function DashboardPage() {
           {/* Quick Actions */}
           <div className="mb-6">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">{t('quickActions')}</p>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {[
-                { label: t('uploadReceipt'), icon: Receipt, href: `/${locale}/receipts` },
-                { label: t('addExpense'),    icon: Plus,    href: `/${locale}/expenses` },
-                { label: t('viewTaxes'),     icon: TrendingUp, href: `/${locale}/taxes` },
-                { label: t('generateForm'),  icon: FileText,  href: `/${locale}/forms` },
-              ].map((action) => {
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+              {quickActions.map((action) => {
                 const Icon = action.icon;
                 return (
                   <button
                     key={action.label}
                     onClick={() => router.push(action.href)}
-                    className="group flex items-center gap-3 px-4 py-3 bg-white border border-gray-100 rounded-2xl hover:border-tenir-200 hover:bg-tenir-50/30 transition-all duration-150 shadow-sm shadow-gray-100 text-left"
+                    className="group flex items-center gap-2.5 px-4 py-3 bg-white border border-gray-100 rounded-2xl hover:border-tenir-200 hover:bg-tenir-50/20 transition-all duration-150 shadow-sm text-left"
                   >
-                    <span className="w-8 h-8 rounded-xl bg-tenir-50 text-tenir-600 flex items-center justify-center flex-shrink-0 group-hover:bg-tenir-100 transition-colors">
-                      <Icon size={15} />
+                    <span className="w-7 h-7 rounded-lg bg-gray-50 text-gray-500 flex items-center justify-center flex-shrink-0 group-hover:bg-tenir-100 group-hover:text-tenir-600 transition-colors">
+                      <Icon size={14} />
                     </span>
                     <span className="text-sm font-medium text-gray-700 group-hover:text-gray-900 flex-1 leading-tight">{action.label}</span>
-                    <ChevronRight size={14} className="text-gray-300 group-hover:text-tenir-400 transition-colors flex-shrink-0" />
+                    <ChevronRight size={13} className="text-gray-300 group-hover:text-tenir-400 transition-colors flex-shrink-0" />
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* Chart + Quick Stats */}
+          {/* Chart + Stats */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
             <div className="lg:col-span-2">
               <Card padding="md" shadow="sm">
-                <CardHeader>
-                  <CardTitle>{t('monthlyOverview')}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {chartData.length === 0 ? (
-                    <div className="flex items-center justify-center h-52 text-gray-400 text-sm">{t('noChartData')}</div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height={220}>
-                      <AreaChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
-                        <defs>
-                          <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#0c8ee9" stopOpacity={0.15} />
-                            <stop offset="95%" stopColor="#0c8ee9" stopOpacity={0} />
-                          </linearGradient>
-                          <linearGradient id="colorExpenses" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#ef4444" stopOpacity={0.12} />
-                            <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
-                        <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
-                        <Tooltip
-                          contentStyle={{ borderRadius: '12px', border: '1px solid #f3f4f6', boxShadow: '0 4px 16px rgba(0,0,0,0.06)', fontSize: 12 }}
-                          formatter={(v) => formatCurrency(v as number)}
-                        />
-                        <Area type="monotone" dataKey="revenue"  stroke="#0c8ee9" strokeWidth={2} fill="url(#colorRevenue)"  dot={false} name={t('totalRevenue')} />
-                        <Area type="monotone" dataKey="expenses" stroke="#ef4444" strokeWidth={2} fill="url(#colorExpenses)" dot={false} name={t('totalExpenses')} />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  )}
-                </CardContent>
+                <div className="flex items-center justify-between mb-5">
+                  <h3 className="text-base font-semibold text-gray-900">{t('monthlyOverview')}</h3>
+                  <div className="flex items-center gap-4 text-xs text-gray-400">
+                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-tenir-500 inline-block" />{t('totalRevenue')}</span>
+                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-400 inline-block" />{t('totalExpenses')}</span>
+                  </div>
+                </div>
+                {chartData.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-52 gap-3">
+                    <div className="w-12 h-12 rounded-2xl bg-gray-50 flex items-center justify-center">
+                      <TrendingUp size={22} className="text-gray-300" />
+                    </div>
+                    <p className="text-sm text-gray-400">{t('noChartData')}</p>
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <AreaChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+                      <defs>
+                        <linearGradient id="gradRevenue" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#0c8ee9" stopOpacity={0.18} />
+                          <stop offset="100%" stopColor="#0c8ee9" stopOpacity={0} />
+                        </linearGradient>
+                        <linearGradient id="gradExpenses" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#f87171" stopOpacity={0.15} />
+                          <stop offset="100%" stopColor="#f87171" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                      <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} width={42} />
+                      <Tooltip content={<ChartTooltip />} />
+                      <Area type="monotone" dataKey="revenue"  stroke="#0c8ee9" strokeWidth={2} fill="url(#gradRevenue)"  dot={false} name={t('totalRevenue')} />
+                      <Area type="monotone" dataKey="expenses" stroke="#f87171" strokeWidth={2} fill="url(#gradExpenses)" dot={false} name={t('totalExpenses')} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                )}
               </Card>
             </div>
 
             <Card padding="md" shadow="sm">
-              <CardHeader>
-                <CardTitle>{t('quickStats')}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-1">
-                  {[
-                    {
-                      label: t('avgMonthly'),
-                      value: formatCurrency(chartData.length > 0 ? totalExpenses / chartData.length : 0),
-                      valueClass: 'text-gray-900',
-                    },
-                    {
-                      label: t('taxRateEstimate'),
-                      value: '26.5%',
-                      valueClass: 'text-amber-600',
-                    },
-                    {
-                      label: t('ytdMargin'),
-                      value: totalRevenue > 0 ? `${Math.round((netIncome / totalRevenue) * 100)}%` : '—',
-                      valueClass: netIncome >= 0 ? 'text-emerald-600' : 'text-red-500',
-                    },
-                  ].map((stat) => (
-                    <div key={stat.label} className="flex justify-between items-center py-3 border-b border-gray-50 last:border-0">
-                      <span className="text-sm text-gray-500">{stat.label}</span>
-                      <span className={`text-sm font-semibold ${stat.valueClass}`}>{stat.value}</span>
-                    </div>
-                  ))}
+              <h3 className="text-base font-semibold text-gray-900 mb-5">{t('quickStats')}</h3>
+              <div className="space-y-1">
+                {[
+                  { label: t('avgMonthly'), value: formatCurrency(avgMonthly), color: 'text-gray-900' },
+                  { label: t('taxRateEstimate'), value: '26.5%', color: 'text-amber-600' },
+                  { label: t('ytdMargin'), value: margin !== null ? `${margin}%` : '—', color: netIncome >= 0 ? 'text-emerald-600' : 'text-red-500' },
+                  { label: 'Est. Tax Due', value: formatCurrency(estimatedTax), color: 'text-amber-500' },
+                ].map((s) => (
+                  <div key={s.label} className="flex justify-between items-center py-3 border-b border-gray-50 last:border-0">
+                    <span className="text-sm text-gray-500">{s.label}</span>
+                    <span className={`text-sm font-semibold ${s.color}`}>{s.value}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Mini net income indicator */}
+              {totalRevenue > 0 && (
+                <div className="mt-4 pt-4 border-t border-gray-50">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs text-gray-400">Revenue vs Expenses</span>
+                    <span className={`text-xs font-semibold ${netIncome >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                      {netIncome >= 0 ? '+' : ''}{margin}%
+                    </span>
+                  </div>
+                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${netIncome >= 0 ? 'bg-emerald-400' : 'bg-red-400'}`}
+                      style={{ width: `${Math.min(100, Math.abs(margin ?? 0))}%` }}
+                    />
+                  </div>
                 </div>
-              </CardContent>
+              )}
             </Card>
           </div>
 
           {/* Recent Transactions */}
           <Card padding="none" shadow="sm">
-            <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
+            <div className="px-6 py-4 flex items-center justify-between">
               <h3 className="text-base font-semibold text-gray-900">{t('recentTransactions')}</h3>
               <button
                 onClick={() => router.push(`/${locale}/expenses`)}
@@ -274,35 +315,56 @@ export default function DashboardPage() {
                 {tCommon('viewAll')} <ChevronRight size={12} />
               </button>
             </div>
+
             {(orgLoading || loading) ? (
-              <div className="py-12 text-center text-sm text-gray-400">{tCommon('loading')}</div>
+              <div className="py-14 flex flex-col items-center gap-3">
+                <div className="w-5 h-5 border-2 border-tenir-300 border-t-tenir-600 rounded-full animate-spin" />
+                <p className="text-xs text-gray-400">{tCommon('loading')}</p>
+              </div>
             ) : recentTx.length === 0 ? (
-              <div className="py-12 text-center text-sm text-gray-400">{t('noTransactions')}</div>
+              <div className="py-14 flex flex-col items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-gray-50 flex items-center justify-center">
+                  <Receipt size={20} className="text-gray-300" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-medium text-gray-500">{t('noTransactions')}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Transactions will appear here once added</p>
+                </div>
+                <button
+                  onClick={() => router.push(`/${locale}/expenses`)}
+                  className="mt-1 text-xs text-tenir-600 hover:text-tenir-700 font-medium flex items-center gap-1"
+                >
+                  <Plus size={12} /> Add your first transaction
+                </button>
+              </div>
             ) : (
               <div className="divide-y divide-gray-50">
-                {recentTx.map((tx) => (
-                  <div key={tx.id} className="flex items-center gap-4 px-6 py-3.5 hover:bg-gray-50/60 transition-colors">
-                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${isIncome(tx.type) ? 'bg-emerald-50' : 'bg-red-50'}`}>
-                      {isIncome(tx.type)
-                        ? <ArrowUpRight size={14} className="text-emerald-600" />
-                        : <ArrowDownRight size={14} className="text-red-500" />
-                      }
+                {recentTx.map((tx) => {
+                  const income = isIncome(tx.type);
+                  return (
+                    <div key={tx.id} className="flex items-center gap-3.5 px-6 py-3.5 hover:bg-gray-50/60 transition-colors group">
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${income ? 'bg-emerald-50' : 'bg-red-50'}`}>
+                        {income
+                          ? <ArrowUpRight size={14} className="text-emerald-500" />
+                          : <ArrowDownRight size={14} className="text-red-400" />
+                        }
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate leading-snug">{tx.description}</p>
+                        <p className="text-xs text-gray-400 mt-0.5 truncate">{tx.category}</p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className={`text-sm font-semibold leading-snug ${income ? 'text-emerald-600' : 'text-red-500'}`}>
+                          {income ? '+' : '-'}{formatCurrency(Math.abs(tx.amount))}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5">{tx.date}</p>
+                      </div>
+                      <span className={`hidden sm:inline-flex text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${income ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
+                        {typeLabel(tx.type)}
+                      </span>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{tx.description}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{tx.category}</p>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className={`text-sm font-semibold ${isIncome(tx.type) ? 'text-emerald-600' : 'text-red-500'}`}>
-                        {isIncome(tx.type) ? '+' : '-'}{formatCurrency(Math.abs(tx.amount))}
-                      </p>
-                      <p className="text-xs text-gray-400 mt-0.5">{tx.date}</p>
-                    </div>
-                    <span className={`hidden sm:inline-flex text-xs font-medium px-2 py-0.5 rounded-full ${isIncome(tx.type) ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
-                      {typeLabel(tx.type)}
-                    </span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </Card>
