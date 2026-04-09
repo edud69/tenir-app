@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
 import { Table, TableBody, TableHead, TableHeader, TableRow, TableCell } from '@/components/ui/table';
-import { Plus, Edit2, Trash2, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import { Plus, Edit2, Trash2, ArrowUpRight, ArrowDownLeft, Paperclip } from 'lucide-react';
 import { useOrganization } from '@/hooks/useOrganization';
 import { createClient } from '@/lib/supabase/client';
 
@@ -30,6 +30,7 @@ interface Transaction {
   recurrence_frequency?: string;
   organization_id?: string;
   created_by?: string;
+  receipt_id?: string | null;
 }
 
 const categoryOptions = [
@@ -505,9 +506,17 @@ export default function ExpensesPage() {
                           <TableCell>{formatDate(tx.date)}</TableCell>
                           <TableCell>
                             <div>
-                              <p className="font-medium text-gray-900">{tx.description}</p>
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium text-gray-900">{tx.description}</p>
+                                {tx.receipt_id && (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-tenir-50 text-tenir-600 border border-tenir-100">
+                                    <Paperclip size={10} />
+                                    Receipt
+                                  </span>
+                                )}
+                              </div>
                               {tx.vendor && (
-                                <p className="text-sm text-gray-600">{tx.vendor}</p>
+                                <p className="text-sm text-gray-500">{tx.vendor}</p>
                               )}
                             </div>
                           </TableCell>
