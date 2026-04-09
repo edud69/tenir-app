@@ -1,4 +1,5 @@
 import { ReactNode } from 'react';
+import { LanguageSwitcher } from '@/components/ui/language-switcher';
 
 interface AuthLayoutProps {
   children: ReactNode;
@@ -108,7 +109,12 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
       </div>
 
       {/* Right form panel */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 bg-white">
+      <div className="flex-1 flex flex-col items-center justify-center px-6 py-12 bg-white relative">
+        {/* Language switcher */}
+        <div className="absolute top-5 right-5">
+          <LanguageSwitcher />
+        </div>
+
         {/* Mobile logo */}
         <div className="lg:hidden mb-10 flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-xl bg-tenir-500 flex items-center justify-center">
