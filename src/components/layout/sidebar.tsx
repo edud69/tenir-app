@@ -13,18 +13,17 @@ import {
   FileText,
   Settings,
   Bot,
-  Menu,
   X,
   LogOut,
   Globe,
+  ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
 import { Logo } from '@/components/ui/logo';
 
 interface NavItem {
   href: string;
-  icon: React.ReactNode;
+  icon: React.ElementType;
   label: string;
   key: string;
 }
@@ -45,48 +44,12 @@ export default function Sidebar({ user, locale }: SidebarProps) {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   const navItems: NavItem[] = [
-    {
-      href: `/${locale}/dashboard`,
-      icon: <LayoutDashboard size={20} />,
-      label: t('dashboard'),
-      key: 'dashboard',
-    },
-    {
-      href: `/${locale}/receipts`,
-      icon: <Receipt size={20} />,
-      label: t('receipts'),
-      key: 'receipts',
-    },
-    {
-      href: `/${locale}/expenses`,
-      icon: <Wallet size={20} />,
-      label: t('expenses'),
-      key: 'expenses',
-    },
-    {
-      href: `/${locale}/investments`,
-      icon: <TrendingUp size={20} />,
-      label: t('investments'),
-      key: 'investments',
-    },
-    {
-      href: `/${locale}/taxes`,
-      icon: <Calculator size={20} />,
-      label: t('taxes'),
-      key: 'taxes',
-    },
-    {
-      href: `/${locale}/forms`,
-      icon: <FileText size={20} />,
-      label: t('forms'),
-      key: 'forms',
-    },
-    {
-      href: `/${locale}/settings`,
-      icon: <Settings size={20} />,
-      label: t('settings'),
-      key: 'settings',
-    },
+    { href: `/${locale}/dashboard`,   icon: LayoutDashboard, label: t('dashboard'),   key: 'dashboard' },
+    { href: `/${locale}/receipts`,    icon: Receipt,         label: t('receipts'),    key: 'receipts' },
+    { href: `/${locale}/expenses`,    icon: Wallet,          label: t('expenses'),    key: 'expenses' },
+    { href: `/${locale}/investments`, icon: TrendingUp,      label: t('investments'), key: 'investments' },
+    { href: `/${locale}/taxes`,       icon: Calculator,      label: t('taxes'),       key: 'taxes' },
+    { href: `/${locale}/forms`,       icon: FileText,        label: t('forms'),       key: 'forms' },
   ];
 
   const isActive = (href: string) => {
@@ -95,115 +58,163 @@ export default function Sidebar({ user, locale }: SidebarProps) {
     return segment === pathSegment;
   };
 
-  const handleLogout = async () => {
-    // This will be handled by a separate logout route
-    router.push(`/${locale}/logout`);
-  };
+  const handleLogout = () => router.push(`/${locale}/logout`);
 
   const switchLanguage = () => {
     const newLocale = locale === 'en' ? 'fr' : 'en';
-    const pathWithoutLocale = pathname.substring(3);
-    router.push(`/${newLocale}${pathWithoutLocale}`);
+    router.push(`/${newLocale}${pathname.substring(3)}`);
   };
 
+  const initials = user.name
+    .split(' ')
+    .map((n) => n[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+
   const sidebarContent = (
-    <>
+    <div className="flex flex-col h-full">
       {/* Logo */}
-      <div className="p-5 border-b border-gray-100">
-        <Link href={`/${locale}/dashboard`}>
-          <Logo size={34} variant="full" />
+      <div className="px-5 py-5">
+        <Link href={`/${locale}/dashboard`} className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-tenir-500 flex items-center justify-center flex-shrink-0">
+            <span className="text-white font-bold text-sm">T</span>
+          </div>
+          <span className="font-semibold text-white text-base tracking-tight">tenir<span className="text-tenir-400">.app</span></span>
         </Link>
       </div>
 
+      {/* Nav label */}
+      <div className="px-5 mb-2">
+        <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Menu</span>
+      </div>
+
       {/* Navigation Links */}
-      <nav className="flex-1 px-4 py-6">
-        <div className="space-y-2">
-          {navItems.map((item) => (
-            <Link key={item.key} href={item.href}>
-              <div
-                className={cn(
-                  'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors duration-200',
-                  isActive(item.href)
-                    ? 'bg-tenir-100 text-tenir-700'
-                    : 'text-gray-700 hover:bg-gray-100'
-                )}
-              >
-                {item.icon}
-                <span className="font-medium">{item.label}</span>
-              </div>
-            </Link>
-          ))}
+      <nav className="flex-1 px-3">
+        <div className="space-y-0.5">
+          {navItems.map((item) => {
+            const active = isActive(item.href);
+            const Icon = item.icon;
+            return (
+              <Link key={item.key} href={item.href} onClick={() => setIsMobileOpen(false)}>
+                <div className={cn(
+                  'group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150',
+                  active
+                    ? 'bg-white/10 text-white'
+                    : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                )}>
+                  <Icon
+                    size={18}
+                    className={cn(
+                      'flex-shrink-0 transition-colors',
+                      active ? 'text-tenir-400' : 'text-slate-500 group-hover:text-slate-300'
+                    )}
+                  />
+                  <span className="text-sm font-medium flex-1">{item.label}</span>
+                  {active && (
+                    <div className="w-1.5 h-1.5 rounded-full bg-tenir-400 flex-shrink-0" />
+                  )}
+                </div>
+              </Link>
+            );
+          })}
         </div>
 
-        {/* AI Assistant Button */}
-        <div className="mt-8 pt-8 border-t border-gray-200">
-          <button className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-accent-500 text-white hover:bg-accent-600 transition-colors duration-200 font-medium">
-            <Bot size={20} />
-            <span>{t('assistant')}</span>
+        {/* Settings — separated */}
+        <div className="mt-4 pt-4 border-t border-white/5">
+          <Link href={`/${locale}/settings`} onClick={() => setIsMobileOpen(false)}>
+            <div className={cn(
+              'group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150',
+              isActive(`/${locale}/settings`)
+                ? 'bg-white/10 text-white'
+                : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+            )}>
+              <Settings
+                size={18}
+                className={cn(
+                  'flex-shrink-0 transition-colors',
+                  isActive(`/${locale}/settings`) ? 'text-tenir-400' : 'text-slate-500 group-hover:text-slate-300'
+                )}
+              />
+              <span className="text-sm font-medium flex-1">{t('settings')}</span>
+              {isActive(`/${locale}/settings`) && (
+                <div className="w-1.5 h-1.5 rounded-full bg-tenir-400 flex-shrink-0" />
+              )}
+            </div>
+          </Link>
+        </div>
+
+        {/* AI Assistant */}
+        <div className="mt-4">
+          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-gradient-to-r from-accent-600 to-accent-500 text-white hover:from-accent-500 hover:to-accent-400 transition-all duration-150 font-medium text-sm shadow-lg shadow-accent-900/30">
+            <Bot size={18} className="flex-shrink-0" />
+            <span className="flex-1 text-left">{t('assistant')}</span>
+            <ChevronRight size={14} className="opacity-60" />
           </button>
         </div>
       </nav>
 
-      {/* User Section & Bottom Controls */}
-      <div className="border-t border-gray-200 p-4">
-        {/* Language Switcher */}
-        <button
-          onClick={switchLanguage}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors duration-200 mb-3"
-          title={locale === 'en' ? 'Switch to Français' : 'Switch to English'}
-        >
-          <Globe size={18} />
-          <span className="text-sm font-medium">{locale === 'en' ? 'EN' : 'FR'}</span>
-        </button>
-
-        {/* User Info */}
-        <div className="flex items-center gap-3 px-3 py-2 mb-3">
-          <div className="w-10 h-10 bg-tenir-600 rounded-full flex items-center justify-center text-white font-semibold">
-            {user.name.charAt(0).toUpperCase()}
+      {/* Bottom section */}
+      <div className="p-3 mt-2">
+        {/* User card */}
+        <div className="rounded-xl bg-white/5 p-3 mb-2">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-tenir-500 to-tenir-700 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+              {initials}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-white truncate leading-tight">{user.name}</p>
+              <p className="text-xs text-slate-500 truncate leading-tight mt-0.5">{user.email}</p>
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-gray-900 truncate">{user.name}</p>
-            <p className="text-xs text-gray-600 truncate">{user.email}</p>
+          <div className="flex items-center gap-2 mt-3">
+            <button
+              onClick={switchLanguage}
+              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-colors text-xs font-medium"
+            >
+              <Globe size={13} />
+              <span>{locale.toUpperCase()}</span>
+            </button>
+            <button
+              onClick={handleLogout}
+              className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors text-xs font-medium"
+            >
+              <LogOut size={13} />
+              <span>{t('logout')}</span>
+            </button>
           </div>
         </div>
-
-        {/* Logout Button */}
-        <Button
-          onClick={handleLogout}
-          variant="outline"
-          size="sm"
-          fullWidth
-          icon={<LogOut size={16} />}
-        >
-          {t('logout')}
-        </Button>
       </div>
-    </>
+    </div>
   );
 
   return (
     <>
-      {/* Mobile Menu Toggle */}
-      <button
-        onClick={() => setIsMobileOpen(!isMobileOpen)}
-        className="md:hidden fixed top-4 left-4 z-50 p-2 hover:bg-gray-100 rounded-lg"
-      >
-        {isMobileOpen ? <X size={24} /> : <Menu size={24} />}
-      </button>
-
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col w-64 bg-white border-r border-gray-200 h-screen sticky top-0">
+      <aside className="hidden md:flex flex-col w-60 bg-slate-950 h-screen sticky top-0 border-r border-white/5">
         {sidebarContent}
       </aside>
+
+      {/* Mobile toggle */}
+      <button
+        onClick={() => setIsMobileOpen(!isMobileOpen)}
+        className="md:hidden fixed top-4 left-4 z-50 w-9 h-9 flex items-center justify-center bg-slate-900 text-white rounded-xl shadow-lg"
+      >
+        {isMobileOpen ? <X size={18} /> : (
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M2 4.5h14M2 9h14M2 13.5h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+        )}
+      </button>
 
       {/* Mobile Sidebar */}
       {isMobileOpen && (
         <>
           <div
-            className="md:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
+            className="md:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
             onClick={() => setIsMobileOpen(false)}
           />
-          <aside className="md:hidden fixed left-0 top-0 w-64 h-screen bg-white border-r border-gray-200 z-40 overflow-y-auto">
+          <aside className="md:hidden fixed left-0 top-0 w-60 h-screen bg-slate-950 border-r border-white/5 z-40 overflow-y-auto">
             {sidebarContent}
           </aside>
         </>
