@@ -1,221 +1,193 @@
-interface TaxCalculationRequest {
-  activeBusinessIncome: number;
-  investmentIncome: number;
-  capitalGains: number;
-  dividendsReceived: number;
-  taxYear: number;
-  corporationType: 'ccpc' | 'general';
-}
-
-interface TaxCalculationResult {
-  activeBusinessIncome: number;
-  federalSmallBusinessTax: number;
-  federalGeneralTax: number;
-  federalInvestmentIncomeTax: number;
-  federalCapitalGainsTax: number;
-  federalDividendTax: number;
-  totalFederalTax: number;
-
-  quebecSmallBusinessTax: number;
-  quebecGeneralTax: number;
-  quebecInvestmentIncomeTax: number;
-  quebecCapitalGainsTax: number;
-  quebecDividendTax: number;
-  totalQuebecTax: number;
-
-  totalTax: number;
-  effectiveRate: number;
-
-  capitalGainInclusionRate: number;
-  capitalGainsTaxable: number;
-
-  rdtohEligible: number;
-  rdtohNonEligible: number;
-
-  details: {
-    notes: string[];
-  };
-}
+import { createServerSupabaseClient } from '@/lib/supabase/server';
 
 // 2024-2025 Canadian and Quebec tax rates
 const TAX_RATES = {
   federal: {
-    smallBusinessRate: 0.09, // 9% on first $500k
+    smallBusinessRate: 0.09,
     smallBusinessLimit: 500000,
-    generalRate: 0.15, // 15% above $500k
-    investmentIncome: 0.3867, // 38.67% on investment income (includes 10.67% refundable)
-    investmentIncomeRefundable: 0.1067, // 10.67% refundable
-    capitalGainsInclusion: 0.666667, // 2/3 inclusion rate post June 2024
-    capitalGainsInclusionOver250k: 0.666667, // Same for amounts over $250k
+    generalRate: 0.15,
+    investmentIncome: 0.3867,
+    capitalGainsInclusion: 0.666667,
   },
   quebec: {
-    smallBusinessRate: 0.032, // 3.2% on first $500k
+    smallBusinessRate: 0.032,
     smallBusinessLimit: 500000,
-    generalRate: 0.115, // 11.5% above $500k
-    investmentIncome: 0.4596, // 45.96% on investment income
-    capitalGainsInclusion: 0.666667, // 2/3 inclusion rate
+    generalRate: 0.115,
+    investmentIncome: 0.4596,
+    capitalGainsInclusion: 0.666667,
   },
 };
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as TaxCalculationRequest;
-    const {
-      activeBusinessIncome,
-      investmentIncome,
-      capitalGains,
-      dividendsReceived,
-      taxYear,
-      corporationType,
-    } = body;
+    const body = await request.json();
+    const { orgId, taxYear } = body as { orgId: string; taxYear: number };
 
-    const result: TaxCalculationResult = {
-      activeBusinessIncome,
-      federalSmallBusinessTax: 0,
-      federalGeneralTax: 0,
-      federalInvestmentIncomeTax: 0,
-      federalCapitalGainsTax: 0,
-      federalDividendTax: 0,
-      totalFederalTax: 0,
+    if (!orgId || !taxYear) {
+      return new Response(JSON.stringify({ error: 'orgId and taxYear are required' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
-      quebecSmallBusinessTax: 0,
-      quebecGeneralTax: 0,
-      quebecInvestmentIncomeTax: 0,
-      quebecCapitalGainsTax: 0,
-      quebecDividendTax: 0,
-      totalQuebecTax: 0,
+    const supabase = await createServerSupabaseClient();
 
-      totalTax: 0,
-      effectiveRate: 0,
+    // Fetch organization's tax profile settings
+    const { data: profile } = await (supabase as any)
+      .from('tax_profiles')
+      .select('corporation_type, small_business_limit, grip_balance, cda_balance, active_business_income, aggregate_investment_income')
+      .eq('organization_id', orgId)
+      .eq('tax_year', taxYear)
+      .single();
 
-      capitalGainInclusionRate: TAX_RATES.federal.capitalGainsInclusion,
-      capitalGainsTaxable: 0,
+    // Fetch income from transactions for the tax year
+    const yearStart = `${taxYear}-01-01`;
+    const yearEnd = `${taxYear}-12-31`;
 
-      rdtohEligible: 0,
-      rdtohNonEligible: 0,
+    const { data: transactions } = await (supabase as any)
+      .from('transactions')
+      .select('amount, type, category')
+      .eq('organization_id', orgId)
+      .gte('date', yearStart)
+      .lte('date', yearEnd);
 
-      details: {
-        notes: [],
-      },
-    };
+    // Aggregate income by category
+    let activeBusinessIncome = 0;
+    let investmentIncome = 0;
+    let capitalGains = 0;
+    let dividendsReceived = 0;
 
-    // Calculate capital gains taxable amount
-    result.capitalGainsTaxable = capitalGains * TAX_RATES.federal.capitalGainsInclusion;
+    if (transactions && transactions.length > 0) {
+      for (const tx of transactions) {
+        const amount = Math.abs(tx.amount);
+        if (tx.type === 'income' || tx.amount > 0) {
+          const cat = (tx.category || '').toLowerCase();
+          if (cat.includes('investment') || cat.includes('interest')) {
+            investmentIncome += amount;
+          } else if (cat.includes('capital') || cat.includes('gain')) {
+            capitalGains += amount;
+          } else if (cat.includes('dividend')) {
+            dividendsReceived += amount;
+          } else {
+            activeBusinessIncome += amount;
+          }
+        }
+      }
+    }
 
-    // Federal tax calculation
-    // Small business income (first $500k)
-    const smallBusinessIncome = Math.min(
-      activeBusinessIncome,
-      TAX_RATES.federal.smallBusinessLimit
-    );
-    result.federalSmallBusinessTax = smallBusinessIncome * TAX_RATES.federal.smallBusinessRate;
+    // Fall back to stored values if no transactions
+    if (activeBusinessIncome === 0 && investmentIncome === 0) {
+      activeBusinessIncome = profile?.active_business_income ?? 250000;
+      investmentIncome = profile?.aggregate_investment_income ?? 0;
+    }
 
-    // General rate income (above $500k)
-    const generalIncome = Math.max(0, activeBusinessIncome - TAX_RATES.federal.smallBusinessLimit);
-    result.federalGeneralTax = generalIncome * TAX_RATES.federal.generalRate;
+    const corporationType = profile?.corporation_type ?? 'ccpc';
+    const smallBusinessLimit = profile?.small_business_limit ?? TAX_RATES.federal.smallBusinessLimit;
+    const gripBalance = profile?.grip_balance ?? 0;
+    const cdaBalance = profile?.cda_balance ?? 0;
 
-    // Investment income tax (federal)
-    result.federalInvestmentIncomeTax =
-      investmentIncome * TAX_RATES.federal.investmentIncome;
+    // Federal tax
+    const fedSmallIncome = Math.min(activeBusinessIncome, smallBusinessLimit);
+    const fedGeneralIncome = Math.max(0, activeBusinessIncome - smallBusinessLimit);
+    const capitalGainsTaxable = capitalGains * TAX_RATES.federal.capitalGainsInclusion;
 
-    // Capital gains tax (federal)
-    result.federalCapitalGainsTax = result.capitalGainsTaxable * TAX_RATES.federal.generalRate;
+    const federalTax =
+      fedSmallIncome * TAX_RATES.federal.smallBusinessRate +
+      fedGeneralIncome * TAX_RATES.federal.generalRate +
+      investmentIncome * TAX_RATES.federal.investmentIncome +
+      capitalGainsTaxable * TAX_RATES.federal.generalRate +
+      dividendsReceived * 0.20;
 
-    // Dividend tax (federal) - simplified, actual rate depends on dividend type
-    result.federalDividendTax = dividendsReceived * 0.20; // Approximate rate
-
-    result.totalFederalTax =
-      result.federalSmallBusinessTax +
-      result.federalGeneralTax +
-      result.federalInvestmentIncomeTax +
-      result.federalCapitalGainsTax +
-      result.federalDividendTax;
-
-    // Quebec tax calculation
-    // Small business income (first $500k)
-    const qcSmallBusinessIncome = Math.min(
-      activeBusinessIncome,
-      TAX_RATES.quebec.smallBusinessLimit
-    );
-    result.quebecSmallBusinessTax = qcSmallBusinessIncome * TAX_RATES.quebec.smallBusinessRate;
-
-    // General rate income (above $500k)
+    // Quebec tax
+    const qcSmallIncome = Math.min(activeBusinessIncome, TAX_RATES.quebec.smallBusinessLimit);
     const qcGeneralIncome = Math.max(0, activeBusinessIncome - TAX_RATES.quebec.smallBusinessLimit);
-    result.quebecGeneralTax = qcGeneralIncome * TAX_RATES.quebec.generalRate;
+    const qcCapGainsTaxable = capitalGains * TAX_RATES.quebec.capitalGainsInclusion;
 
-    // Investment income tax (Quebec)
-    result.quebecInvestmentIncomeTax =
-      investmentIncome * TAX_RATES.quebec.investmentIncome;
+    const provincialTax =
+      qcSmallIncome * TAX_RATES.quebec.smallBusinessRate +
+      qcGeneralIncome * TAX_RATES.quebec.generalRate +
+      investmentIncome * TAX_RATES.quebec.investmentIncome +
+      qcCapGainsTaxable * TAX_RATES.quebec.generalRate +
+      dividendsReceived * 0.15;
 
-    // Capital gains tax (Quebec)
-    result.quebecCapitalGainsTax =
-      result.capitalGainsTaxable * TAX_RATES.quebec.generalRate;
+    const totalTax = federalTax + provincialTax;
+    const taxableIncome = activeBusinessIncome + investmentIncome + capitalGainsTaxable + dividendsReceived;
+    const effectiveRate = taxableIncome > 0 ? totalTax / taxableIncome : 0;
 
-    // Dividend tax (Quebec) - simplified
-    result.quebecDividendTax = dividendsReceived * 0.15; // Approximate rate
+    const rdtohEligible = investmentIncome * 0.30;
+    const rdtohNonEligible = investmentIncome * 0.1067;
 
-    result.totalQuebecTax =
-      result.quebecSmallBusinessTax +
-      result.quebecGeneralTax +
-      result.quebecInvestmentIncomeTax +
-      result.quebecCapitalGainsTax +
-      result.quebecDividendTax;
-
-    // Total and effective rate
-    result.totalTax = result.totalFederalTax + result.totalQuebecTax;
-
-    const totalIncome =
-      activeBusinessIncome + investmentIncome + result.capitalGainsTaxable + dividendsReceived;
-    result.effectiveRate = totalIncome > 0 ? result.totalTax / totalIncome : 0;
-
-    // Calculate RDTOH (Refundable Dividend Tax On Hand / IMRTD)
-    // 30.67% of investment income for eligible portion
-    result.rdtohEligible = investmentIncome * 0.30;
-    result.rdtohNonEligible = investmentIncome * 0.1067;
-
-    // Add notes
-    result.details.notes = [
-      `Calculations based on ${taxYear} tax year`,
-      `Corporation type: ${corporationType === 'ccpc' ? 'CCPC' : 'General Corporation'}`,
-      `Capital gains inclusion rate: ${(TAX_RATES.federal.capitalGainsInclusion * 100).toFixed(1)}%`,
-      'These are estimates. Consult a CPA for precise calculations.',
-      'Rates are simplified approximations for planning purposes.',
-      'Actual taxes may vary based on provincial credits and deductions.',
+    // Quarterly installments
+    const quarterlyAmount = totalTax / 4;
+    const installments = [
+      { quarter: 1, dueDate: `${taxYear}-03-15`, amount: Math.round(quarterlyAmount) },
+      { quarter: 2, dueDate: `${taxYear}-06-15`, amount: Math.round(quarterlyAmount) },
+      { quarter: 3, dueDate: `${taxYear}-09-15`, amount: Math.round(quarterlyAmount) },
+      { quarter: 4, dueDate: `${taxYear}-12-15`, amount: Math.round(totalTax - quarterlyAmount * 3) },
     ];
 
-    if (activeBusinessIncome > TAX_RATES.federal.smallBusinessLimit) {
-      result.details.notes.push(
-        `Income exceeds small business limit ($${TAX_RATES.federal.smallBusinessLimit.toLocaleString()})`
-      );
+    // Tax breakdown for chart
+    const taxBreakdown = [
+      { name: 'Federal Tax', value: Math.round(federalTax), color: '#3b82f6' },
+      { name: 'Quebec Tax', value: Math.round(provincialTax), color: '#8b5cf6' },
+    ];
+    if (rdtohEligible > 0) {
+      taxBreakdown.push({ name: 'RDTOH (Eligible)', value: Math.round(rdtohEligible), color: '#10b981' });
     }
 
-    if (investmentIncome > 0) {
-      result.details.notes.push(
-        `Investment income attracts higher tax rates and creates RDTOH/IMRTD credits`
-      );
-    }
+    // Integration model (salary vs dividend comparison)
+    const integrationData = [
+      {
+        method: 'Salary',
+        salary: activeBusinessIncome,
+        eligibleDiv: 0,
+        nonEligibleDiv: 0,
+        totalCost: Math.round(activeBusinessIncome * 0.53),
+        savings: 0,
+      },
+      {
+        method: 'Eligible Dividend',
+        salary: 0,
+        eligibleDiv: activeBusinessIncome,
+        nonEligibleDiv: 0,
+        totalCost: Math.round(activeBusinessIncome * 0.39),
+        savings: Math.round(activeBusinessIncome * (0.53 - 0.39)),
+      },
+      {
+        method: 'Non-Eligible Dividend',
+        salary: 0,
+        eligibleDiv: 0,
+        nonEligibleDiv: activeBusinessIncome,
+        totalCost: Math.round(activeBusinessIncome * 0.46),
+        savings: Math.round(activeBusinessIncome * (0.53 - 0.46)),
+      },
+    ];
 
-    if (capitalGains > 0) {
-      result.details.notes.push(
-        `Capital gains inclusion rate of 2/3 applies to investment gain`
-      );
-    }
-
-    return new Response(JSON.stringify(result), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return new Response(
+      JSON.stringify({
+        federal_tax: Math.round(federalTax * 100) / 100,
+        provincial_tax: Math.round(provincialTax * 100) / 100,
+        total_tax: Math.round(totalTax * 100) / 100,
+        taxable_income: Math.round(taxableIncome * 100) / 100,
+        effective_rate: Math.round(effectiveRate * 10000) / 10000,
+        rdtoh_eligible: Math.round(rdtohEligible * 100) / 100,
+        rdtoh_non_eligible: Math.round(rdtohNonEligible * 100) / 100,
+        grip_balance: gripBalance,
+        cda_balance: cdaBalance,
+        installments,
+        tax_breakdown: taxBreakdown,
+        integration_data: integrationData,
+        corporation_type: corporationType,
+        active_business_income: Math.round(activeBusinessIncome * 100) / 100,
+        aggregate_investment_income: Math.round(investmentIncome * 100) / 100,
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
   } catch (error) {
     console.error('Error in tax calculation API:', error);
     return new Response(
-      JSON.stringify({
-        error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      }),
-      {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      }
+      JSON.stringify({ error: error instanceof Error ? error.message : 'Internal server error' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
 }

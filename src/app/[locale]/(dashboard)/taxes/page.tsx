@@ -4,61 +4,26 @@ import React, { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { formatCurrency, formatPercent } from '@/lib/utils';
 import Header from '@/components/layout/header';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
 import {
   PieChart,
   Pie,
   Cell,
   ResponsiveContainer,
-  Legend,
   Tooltip,
 } from 'recharts';
 import {
   TrendingUp,
   DollarSign,
   BarChart3,
-  Calendar,
+  Percent,
+  Calculator,
+  RefreshCw,
+  Building2,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useOrganization } from '@/hooks/useOrganization';
-
-interface StatCardProps {
-  title: string;
-  value: string;
-  icon: React.ReactNode;
-  variant?: 'default' | 'warning' | 'success';
-}
-
-function TaxStatCard({
-  title,
-  value,
-  icon,
-  variant = 'default',
-}: StatCardProps) {
-  const bgColors = {
-    default: 'bg-tenir-100 text-tenir-600',
-    warning: 'bg-red-100 text-red-600',
-    success: 'bg-green-100 text-green-600',
-  };
-
-  return (
-    <Card padding="md" shadow="sm">
-      <div className="flex items-start justify-between">
-        <div className="flex-1">
-          <p className="text-sm font-medium text-gray-600 mb-2">{title}</p>
-          <p className="text-3xl font-bold text-gray-900">{value}</p>
-        </div>
-        <div className={`p-3 rounded-lg ${bgColors[variant]}`}>
-          {icon}
-        </div>
-      </div>
-    </Card>
-  );
-}
 
 interface TaxInstallment {
   quarter: number;
@@ -86,9 +51,11 @@ interface TaxProfile {
   effective_rate: number | null;
   installments: TaxInstallment[] | null;
   integration_data: IntegrationRow[] | null;
-  tax_breakdown: any[] | null;
-  grip: number | null;
-  cda: number | null;
+  tax_breakdown: { name: string; value: number; color: string }[] | null;
+  grip_balance: number | null;
+  cda_balance: number | null;
+  rdtoh_eligible: number | null;
+  rdtoh_non_eligible: number | null;
 }
 
 export default function TaxesPage() {
@@ -127,11 +94,7 @@ export default function TaxesPage() {
         .eq('tax_year', parseInt(selectedYear))
         .single();
 
-      if (error && error.code !== 'PGRST116') {
-        // PGRST116 = no rows returned, which is fine
-        throw error;
-      }
-
+      if (error && error.code !== 'PGRST116') throw error;
       setTaxProfile(data || null);
     } catch (e: any) {
       setError(e.message || 'Failed to load tax profile');
@@ -148,10 +111,7 @@ export default function TaxesPage() {
       const response = await fetch('/api/taxes/calculate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orgId,
-          taxYear: parseInt(selectedYear),
-        }),
+        body: JSON.stringify({ orgId, taxYear: parseInt(selectedYear) }),
       });
 
       if (!response.ok) {
@@ -161,7 +121,6 @@ export default function TaxesPage() {
 
       const result = await response.json();
 
-      // Save to tax_profiles table
       const profileData = {
         organization_id: orgId,
         tax_year: parseInt(selectedYear),
@@ -173,8 +132,13 @@ export default function TaxesPage() {
         installments: result.installments ?? null,
         integration_data: result.integration_data ?? null,
         tax_breakdown: result.tax_breakdown ?? null,
-        grip: result.grip ?? null,
-        cda: result.cda ?? null,
+        grip_balance: result.grip_balance ?? 0,
+        cda_balance: result.cda_balance ?? 0,
+        rdtoh_eligible: result.rdtoh_eligible ?? 0,
+        rdtoh_non_eligible: result.rdtoh_non_eligible ?? 0,
+        active_business_income: result.active_business_income ?? 0,
+        aggregate_investment_income: result.aggregate_investment_income ?? 0,
+        corporation_type: result.corporation_type ?? 'ccpc',
       };
 
       const { data: upserted, error: upsertError } = await (supabase as any)
@@ -199,9 +163,10 @@ export default function TaxesPage() {
   const effectiveRate = taxProfile?.effective_rate ?? 0;
   const installments: TaxInstallment[] = taxProfile?.installments ?? [];
   const integrationData: IntegrationRow[] = taxProfile?.integration_data ?? [];
-  const taxBreakdownData: any[] = taxProfile?.tax_breakdown ?? [];
-  const grip = taxProfile?.grip ?? 0;
-  const cda = taxProfile?.cda ?? 0;
+  const taxBreakdownData = taxProfile?.tax_breakdown ?? [];
+  const gripBalance = taxProfile?.grip_balance ?? 0;
+  const cdaBalance = taxProfile?.cda_balance ?? 0;
+  const rdtohEligible = taxProfile?.rdtoh_eligible ?? 0;
 
   const isLoading = orgLoading || dataLoading;
 
@@ -210,304 +175,360 @@ export default function TaxesPage() {
       <div className="flex flex-col h-full overflow-hidden">
         <Header title={t('projectionsTitle')} />
         <div className="flex-1 flex items-center justify-center">
-          <p className="text-gray-500">{commonT('loading')}</p>
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-8 h-8 border-2 border-tenir-500 border-t-transparent rounded-full animate-spin" />
+            <p className="text-sm text-gray-500">{commonT('loading')}</p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden bg-gray-50">
       <Header title={t('projectionsTitle')} />
 
       <div className="flex-1 overflow-y-auto">
-        <div className="p-6 lg:p-8">
+        <div className="p-6 lg:p-8 max-w-7xl mx-auto">
+
+          {/* Error banner */}
           {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm flex items-center gap-2">
+              <span className="w-4 h-4 rounded-full bg-red-500 flex-shrink-0" />
               {error}
             </div>
           )}
 
-          {/* Year Selector */}
-          <div className="mb-8 flex items-end gap-4">
-            <div className="max-w-xs">
-              <Select
-                label={t('selectYear')}
-                options={yearOptions}
-                value={selectedYear}
-                onChange={(value) => setSelectedYear(value as string)}
-                placeholder={t('selectYear')}
-              />
+          {/* Top bar: year selector + action */}
+          <div className="mb-8 flex items-end justify-between gap-4">
+            <div className="flex items-end gap-4">
+              <div className="w-36">
+                <Select
+                  label={t('selectYear')}
+                  options={yearOptions}
+                  value={selectedYear}
+                  onChange={(value) => setSelectedYear(value as string)}
+                  placeholder={t('selectYear')}
+                />
+              </div>
+              {taxProfile && (
+                <p className="text-sm text-gray-500 pb-2">
+                  Tax projection for fiscal year {selectedYear}
+                </p>
+              )}
             </div>
-            {!taxProfile && !dataLoading && (
+            {!taxProfile ? (
               <Button
                 variant="primary"
                 onClick={handleCalculate}
                 disabled={calculating || !orgId}
+                className="flex items-center gap-2"
               >
+                <Calculator size={16} />
                 {calculating ? commonT('loading') : 'Calculate Taxes'}
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={handleCalculate}
+                disabled={calculating}
+                className="flex items-center gap-2"
+              >
+                <RefreshCw size={15} className={calculating ? 'animate-spin' : ''} />
+                {calculating ? commonT('loading') : 'Recalculate'}
               </Button>
             )}
           </div>
 
-          {/* No profile state */}
+          {/* Empty state */}
           {!taxProfile && !dataLoading && (
-            <Card padding="lg" shadow="sm" className="mb-8 text-center">
-              <DollarSign size={48} className="mx-auto mb-4 text-gray-300" />
-              <h3 className="text-lg font-semibold text-gray-700 mb-2">
+            <div className="flex flex-col items-center justify-center py-24 text-center">
+              <div className="w-20 h-20 rounded-2xl bg-tenir-50 border border-tenir-100 flex items-center justify-center mb-6">
+                <Calculator size={36} className="text-tenir-400" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-800 mb-2">
                 No tax data for {selectedYear}
               </h3>
-              <p className="text-sm text-gray-500 mb-6">
-                Click "Calculate Taxes" to generate a tax projection for {selectedYear}.
+              <p className="text-sm text-gray-500 mb-8 max-w-sm">
+                Generate a tax projection based on your transactions and organization settings.
               </p>
               <Button
                 variant="primary"
                 onClick={handleCalculate}
                 disabled={calculating || !orgId}
+                className="flex items-center gap-2"
               >
+                <Calculator size={16} />
                 {calculating ? commonT('loading') : 'Calculate Taxes'}
               </Button>
-            </Card>
+            </div>
           )}
 
           {taxProfile && (
             <>
-              {/* Summary Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <TaxStatCard
-                  title={t('federalTax')}
+              {/* Summary stat cards */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                <StatCard
+                  label={t('federalTax')}
                   value={formatCurrency(federalTax)}
-                  icon={<DollarSign size={24} />}
-                  variant="warning"
+                  icon={<DollarSign size={18} />}
+                  color="blue"
                 />
-                <TaxStatCard
-                  title={t('provincialTax')}
+                <StatCard
+                  label={t('provincialTax')}
                   value={formatCurrency(provincialTax)}
-                  icon={<DollarSign size={24} />}
-                  variant="warning"
+                  icon={<Building2 size={18} />}
+                  color="purple"
                 />
-                <TaxStatCard
-                  title={t('totalTax')}
+                <StatCard
+                  label={t('totalTax')}
                   value={formatCurrency(totalTax)}
-                  icon={<TrendingUp size={24} />}
-                  variant="warning"
+                  icon={<TrendingUp size={18} />}
+                  color="red"
+                  highlight
                 />
-                <TaxStatCard
-                  title={t('effectiveRate')}
+                <StatCard
+                  label={t('effectiveRate')}
                   value={formatPercent(effectiveRate)}
-                  icon={<BarChart3 size={24} />}
-                  variant="default"
+                  icon={<Percent size={18} />}
+                  color="emerald"
                 />
               </div>
 
-              {/* Main Content Grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-                {/* Tax Breakdown and Pie Chart */}
-                <div className="lg:col-span-2">
-                  <Card padding="md" shadow="sm">
-                    <CardHeader>
-                      <CardTitle level="h3">{t('breakdown')}</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {taxBreakdownData.length > 0 ? (
-                        <>
-                          <ResponsiveContainer width="100%" height={300}>
-                            <PieChart>
-                              <Pie
-                                data={taxBreakdownData}
-                                cx="50%"
-                                cy="50%"
-                                labelLine={false}
-                                label={(entry) => `${entry.name} $${entry.value?.toLocaleString()}`}
-                                outerRadius={80}
-                                fill="#8884d8"
-                                dataKey="value"
-                              >
-                                {taxBreakdownData.map((entry, index) => (
-                                  <Cell key={`cell-${index}`} fill={entry.color || '#0c8ee9'} />
-                                ))}
-                              </Pie>
-                              <Tooltip formatter={(value) => formatCurrency(value as number)} />
-                              <Legend />
-                            </PieChart>
-                          </ResponsiveContainer>
+              {/* Taxable income banner */}
+              <div className="mb-6 px-5 py-4 rounded-xl bg-white border border-gray-200 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <BarChart3 size={18} className="text-gray-400" />
+                  <span className="text-sm font-medium text-gray-600">Taxable Income</span>
+                </div>
+                <span className="text-lg font-bold text-gray-900">{formatCurrency(taxableIncome)}</span>
+              </div>
 
-                          <div className="mt-6 space-y-3">
-                            {taxBreakdownData.map((item, idx) => (
-                              <div
-                                key={idx}
-                                className="flex justify-between items-center pb-3 border-b border-gray-200 last:border-0"
-                              >
-                                <span className="text-sm font-medium text-gray-700">{item.name}</span>
-                                <span className="text-sm font-semibold text-gray-900">
-                                  {formatCurrency(item.value)}
-                                </span>
-                              </div>
-                            ))}
+              {/* Main 2-col layout */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+
+                {/* Tax breakdown chart */}
+                <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 p-6">
+                  <h3 className="text-base font-semibold text-gray-900 mb-6">{t('breakdown')}</h3>
+                  {taxBreakdownData.length > 0 ? (
+                    <div className="flex items-center gap-8">
+                      <div className="flex-shrink-0">
+                        <ResponsiveContainer width={200} height={200}>
+                          <PieChart>
+                            <Pie
+                              data={taxBreakdownData}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={55}
+                              outerRadius={90}
+                              paddingAngle={3}
+                              dataKey="value"
+                            >
+                              {taxBreakdownData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.color || '#3b82f6'} />
+                              ))}
+                            </Pie>
+                            <Tooltip formatter={(value) => formatCurrency(value as number)} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="flex-1 space-y-3">
+                        {taxBreakdownData.map((item, idx) => (
+                          <div key={idx} className="flex items-center justify-between">
+                            <div className="flex items-center gap-2.5">
+                              <span
+                                className="w-3 h-3 rounded-full flex-shrink-0"
+                                style={{ backgroundColor: item.color }}
+                              />
+                              <span className="text-sm text-gray-600">{item.name}</span>
+                            </div>
+                            <span className="text-sm font-semibold text-gray-900">
+                              {formatCurrency(item.value)}
+                            </span>
                           </div>
-                        </>
-                      ) : (
-                        <div className="py-8 text-center text-gray-500 text-sm">
-                          No breakdown data available.
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {/* Account Balances */}
-                <div className="space-y-6">
-                  <Card padding="md" shadow="sm">
-                    <CardHeader>
-                      <CardTitle level="h3">{t('grip')}</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-3xl font-bold text-gray-900 mb-2">
-                        {formatCurrency(grip)}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        Capital gains reserve eligible for capital dividend distribution
-                      </p>
-                      <Button variant="outline" size="sm" className="mt-4 w-full">
-                        {commonT('edit')}
-                      </Button>
-                    </CardContent>
-                  </Card>
-
-                  <Card padding="md" shadow="sm">
-                    <CardHeader>
-                      <CardTitle level="h3">{t('cda')}</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-3xl font-bold text-gray-900 mb-2">
-                        {formatCurrency(cda)}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        Available for tax-free capital dividend distribution
-                      </p>
-                      <Button variant="outline" size="sm" className="mt-4 w-full">
-                        {commonT('edit')}
-                      </Button>
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
-
-              {/* Tax Installments */}
-              {installments.length > 0 && (
-                <Card padding="md" shadow="sm" className="mb-8">
-                  <CardHeader>
-                    <CardTitle level="h3">{t('installments')}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <Table striped hoverable>
-                      <TableHeader>
-                        <TableRow isHeader>
-                          <TableHead>Q</TableHead>
-                          <TableHead>{t('installmentDate')}</TableHead>
-                          <TableHead align="right">{t('installmentAmount')}</TableHead>
-                          <TableHead align="center">{commonT('status')}</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {installments.map((installment, idx) => (
-                          <TableRow key={idx}>
-                            <TableCell>
-                              <Badge variant="info" size="sm">
-                                Q{installment.quarter}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>{installment.dueDate}</TableCell>
-                            <TableCell align="right" className="font-semibold">
-                              {formatCurrency(installment.amount)}
-                            </TableCell>
-                            <TableCell align="center">
-                              <Badge
-                                variant={
-                                  new Date(installment.dueDate) < new Date()
-                                    ? 'success'
-                                    : 'warning'
-                                }
-                                size="sm"
-                              >
-                                {new Date(installment.dueDate) < new Date() ? 'Due' : 'Upcoming'}
-                              </Badge>
-                            </TableCell>
-                          </TableRow>
                         ))}
-                      </TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Integration Model */}
-              {integrationData.length > 0 && (
-                <Card padding="md" shadow="sm">
-                  <CardHeader>
-                    <CardTitle level="h3">{t('integrationModel')}</CardTitle>
-                    <p className="text-sm text-gray-600 mt-2">
-                      {t('integrationDescription')}
-                    </p>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="overflow-x-auto">
-                      <Table striped hoverable>
-                        <TableHeader>
-                          <TableRow isHeader>
-                            <TableHead>Method</TableHead>
-                            <TableHead align="right">{t('salary')}</TableHead>
-                            <TableHead align="right">{t('eligibleDividend')}</TableHead>
-                            <TableHead align="right">{t('nonEligibleDividend')}</TableHead>
-                            <TableHead align="right">{t('totalCost')}</TableHead>
-                            <TableHead align="right">{t('savingsVsSalary')}</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {integrationData.map((row, idx) => (
-                            <TableRow key={idx}>
-                              <TableCell className="font-medium">{row.method}</TableCell>
-                              <TableCell align="right">{formatCurrency(row.salary)}</TableCell>
-                              <TableCell align="right">{formatCurrency(row.eligibleDiv)}</TableCell>
-                              <TableCell align="right">{formatCurrency(row.nonEligibleDiv)}</TableCell>
-                              <TableCell align="right" className="font-semibold">
-                                {formatCurrency(row.totalCost)}
-                              </TableCell>
-                              <TableCell
-                                align="right"
-                                className={`font-semibold ${
-                                  row.savings > 0 ? 'text-green-600' : 'text-red-600'
-                                }`}
-                              >
-                                {row.savings > 0 ? '+' : ''}{formatCurrency(row.savings)}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                        <div className="pt-3 border-t border-gray-100 flex justify-between">
+                          <span className="text-sm font-semibold text-gray-700">Total</span>
+                          <span className="text-sm font-bold text-gray-900">{formatCurrency(totalTax)}</span>
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-xs text-gray-600 mt-4">
-                      This model shows the tax impact of different payment methods to achieve shareholder value.
-                      Based on combined federal and Quebec rates for {selectedYear}.
-                    </p>
-                  </CardContent>
-                </Card>
+                  ) : (
+                    <div className="py-12 text-center text-gray-400 text-sm">
+                      No breakdown data available.
+                    </div>
+                  )}
+                </div>
+
+                {/* Account balances sidebar */}
+                <div className="space-y-4">
+                  <AccountBalanceCard
+                    label={t('grip')}
+                    value={gripBalance}
+                    description="General Rate Income Pool — eligible for enhanced dividend tax credit"
+                    color="blue"
+                  />
+                  <AccountBalanceCard
+                    label={t('cda')}
+                    value={cdaBalance}
+                    description="Capital Dividend Account — available for tax-free distribution"
+                    color="emerald"
+                  />
+                  {rdtohEligible > 0 && (
+                    <AccountBalanceCard
+                      label="RDTOH Eligible"
+                      value={rdtohEligible}
+                      description="Refundable on payment of eligible dividends"
+                      color="purple"
+                    />
+                  )}
+                </div>
+              </div>
+
+              {/* Installments */}
+              {installments.length > 0 && (
+                <div className="bg-white rounded-2xl border border-gray-200 p-6 mb-6">
+                  <h3 className="text-base font-semibold text-gray-900 mb-5">{t('installments')}</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {installments.map((inst) => {
+                      const isPast = new Date(inst.dueDate) < new Date();
+                      return (
+                        <div
+                          key={inst.quarter}
+                          className={`rounded-xl p-4 border ${
+                            isPast
+                              ? 'bg-gray-50 border-gray-200'
+                              : 'bg-tenir-50 border-tenir-200'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-bold uppercase tracking-wide text-gray-500">
+                              Q{inst.quarter}
+                            </span>
+                            <span
+                              className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                isPast
+                                  ? 'bg-gray-200 text-gray-600'
+                                  : 'bg-tenir-100 text-tenir-700'
+                              }`}
+                            >
+                              {isPast ? 'Due' : 'Upcoming'}
+                            </span>
+                          </div>
+                          <p className="text-lg font-bold text-gray-900 mb-1">
+                            {formatCurrency(inst.amount)}
+                          </p>
+                          <p className="text-xs text-gray-500">{inst.dueDate}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
 
-              {/* Recalculate button */}
-              <div className="mt-6 flex justify-end">
-                <Button
-                  variant="outline"
-                  onClick={handleCalculate}
-                  disabled={calculating}
-                >
-                  {calculating ? commonT('loading') : 'Recalculate'}
-                </Button>
-              </div>
+              {/* Integration model */}
+              {integrationData.length > 0 && (
+                <div className="bg-white rounded-2xl border border-gray-200 p-6">
+                  <div className="mb-5">
+                    <h3 className="text-base font-semibold text-gray-900">{t('integrationModel')}</h3>
+                    <p className="text-sm text-gray-500 mt-1">{t('integrationDescription')}</p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-100">
+                          <th className="text-left font-medium text-gray-500 pb-3 pr-4">Method</th>
+                          <th className="text-right font-medium text-gray-500 pb-3 px-4">{t('salary')}</th>
+                          <th className="text-right font-medium text-gray-500 pb-3 px-4">{t('eligibleDividend')}</th>
+                          <th className="text-right font-medium text-gray-500 pb-3 px-4">{t('nonEligibleDividend')}</th>
+                          <th className="text-right font-medium text-gray-500 pb-3 px-4">{t('totalCost')}</th>
+                          <th className="text-right font-medium text-gray-500 pb-3 pl-4">{t('savingsVsSalary')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {integrationData.map((row, idx) => (
+                          <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                            <td className="py-3.5 pr-4 font-medium text-gray-800">{row.method}</td>
+                            <td className="py-3.5 px-4 text-right text-gray-600">{formatCurrency(row.salary)}</td>
+                            <td className="py-3.5 px-4 text-right text-gray-600">{formatCurrency(row.eligibleDiv)}</td>
+                            <td className="py-3.5 px-4 text-right text-gray-600">{formatCurrency(row.nonEligibleDiv)}</td>
+                            <td className="py-3.5 px-4 text-right font-semibold text-gray-900">{formatCurrency(row.totalCost)}</td>
+                            <td className={`py-3.5 pl-4 text-right font-semibold ${row.savings > 0 ? 'text-emerald-600' : row.savings < 0 ? 'text-red-500' : 'text-gray-400'}`}>
+                              {row.savings > 0 ? '+' : ''}{formatCurrency(row.savings)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-4">
+                    Based on combined federal and Quebec rates for {selectedYear}. Consult a CPA for precise planning.
+                  </p>
+                </div>
+              )}
             </>
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Sub-components ──────────────────────────────────────────────────────────
+
+type Color = 'blue' | 'purple' | 'red' | 'emerald';
+
+const colorMap: Record<Color, { icon: string; value: string; bg: string }> = {
+  blue:    { icon: 'bg-blue-100 text-blue-600',    value: 'text-blue-700',    bg: 'bg-blue-50 border-blue-100' },
+  purple:  { icon: 'bg-purple-100 text-purple-600', value: 'text-purple-700',  bg: 'bg-purple-50 border-purple-100' },
+  red:     { icon: 'bg-red-100 text-red-600',       value: 'text-red-700',     bg: 'bg-red-50 border-red-100' },
+  emerald: { icon: 'bg-emerald-100 text-emerald-600', value: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-100' },
+};
+
+function StatCard({
+  label,
+  value,
+  icon,
+  color,
+  highlight = false,
+}: {
+  label: string;
+  value: string;
+  icon: React.ReactNode;
+  color: Color;
+  highlight?: boolean;
+}) {
+  const c = colorMap[color];
+  return (
+    <div className={`rounded-2xl border p-5 bg-white ${highlight ? 'ring-2 ring-red-200' : ''}`}>
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</span>
+        <span className={`w-8 h-8 rounded-lg flex items-center justify-center ${c.icon}`}>
+          {icon}
+        </span>
+      </div>
+      <p className={`text-2xl font-bold ${c.value}`}>{value}</p>
+    </div>
+  );
+}
+
+function AccountBalanceCard({
+  label,
+  value,
+  description,
+  color,
+}: {
+  label: string;
+  value: number;
+  description: string;
+  color: Color;
+}) {
+  const c = colorMap[color];
+  return (
+    <div className={`rounded-2xl border p-5 ${c.bg}`}>
+      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">{label}</p>
+      <p className={`text-2xl font-bold mb-1.5 ${c.value}`}>{formatCurrency(value)}</p>
+      <p className="text-xs text-gray-500 leading-relaxed">{description}</p>
     </div>
   );
 }
