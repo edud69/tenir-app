@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import yahooFinance from 'yahoo-finance2';
+import YahooFinanceClass from 'yahoo-finance2';
+
+// yahoo-finance2 v3 exports the class as default — must instantiate
+const yf = new (YahooFinanceClass as any)();
 
 export interface SymbolSuggestion {
   symbol: string;
@@ -30,7 +33,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const data = await (yahooFinance.search as any)(q, { quotesCount: 8, newsCount: 0 }, { validateResult: false });
+    const data = await yf.search(q, { quotesCount: 8, newsCount: 0 });
     const quotes: any[] = data?.quotes ?? [];
 
     const results: SymbolSuggestion[] = quotes

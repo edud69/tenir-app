@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import yahooFinance from 'yahoo-finance2';
+import YahooFinanceClass from 'yahoo-finance2';
+
+// yahoo-finance2 v3 exports the class as default — must instantiate
+const yf = new (YahooFinanceClass as any)();
 
 export interface QuoteResult {
   symbol: string;
@@ -36,8 +39,7 @@ export async function GET(req: NextRequest) {
   await Promise.all(
     symbols.map(async (symbol) => {
       try {
-        // Use type assertion — the library returns typed data at runtime
-        const q = await yahooFinance.quote(symbol) as any;
+        const q = await yf.quote(symbol);
         const price = q.regularMarketPrice ?? 0;
         const prev  = q.regularMarketPreviousClose ?? price;
 
