@@ -1,5 +1,3 @@
-import { createClient } from '@supabase/supabase-js';
-
 interface ExtractedReceiptData {
   vendorName: string | null;
   totalAmount: number | null;
@@ -36,19 +34,55 @@ function getMediaType(fileType: string): string | null {
 
 export async function POST(request: Request) {
   try {
-    const formData = await request.formData();
-    const file = formData.get('file') as File;
+    const { path: storagePath } = await request.json();
 
-    if (!file) {
-      return new Response(JSON.stringify({ error: 'File is required' }), {
+    if (!storagePath) {
+      return new Response(JSON.stringify({ error: 'path is required' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    const buffer = await file.arrayBuffer();
+    // Download file from Supabase Storage server-to-server (no Vercel payload limit)
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !supabaseKey) {
+      return new Response(JSON.stringify({ error: 'Supabase not configured' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    const { createClient: createSupabase } = await import('@supabase/supabase-js');
+    const supabase = createSupabase(supabaseUrl, supabaseKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    const { data: fileData, error: downloadError } = await supabase.storage
+      .from('receipts')
+      .download(storagePath);
+
+    if (downloadError || !fileData) {
+      console.error('Download error:', downloadError);
+      return new Response(JSON.stringify({ error: 'Failed to download file from storage' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Determine media type from file extension
+    const ext = storagePath.split('.').pop()?.toLowerCase() ?? '';
+    const extToMime: Record<string, string> = {
+      pdf: 'application/pdf',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+    };
+    const fileType = extToMime[ext] ?? fileData.type ?? 'image/jpeg';
+
+    const buffer = await fileData.arrayBuffer();
     const base64 = Buffer.from(buffer).toString('base64');
-    const mediaType = getMediaType(file.type);
+    const mediaType = getMediaType(fileType);
 
     if (!mediaType) {
       return new Response(JSON.stringify({ error: 'Unsupported file type. Use PDF, JPG, or PNG.' }), {
@@ -123,22 +157,6 @@ export async function POST(request: Request) {
         JSON.stringify({ error: 'Failed to parse extracted data', raw: textContent.text }),
         { status: 500, headers: { 'Content-Type': 'application/json' } }
       );
-    }
-
-    // Optionally upload to Supabase Storage
-    try {
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-      if (supabaseUrl && supabaseKey) {
-        const supabase = createClient(supabaseUrl, supabaseKey);
-        const fileName = `receipts/${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        await supabase.storage.from('receipts').upload(fileName, buffer, {
-          contentType: file.type,
-          upsert: false,
-        });
-      }
-    } catch (storageError) {
-      console.error('Storage upload failed:', storageError);
     }
 
     return new Response(JSON.stringify(extractedData), {

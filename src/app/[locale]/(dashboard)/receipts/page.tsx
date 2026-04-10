@@ -522,28 +522,38 @@ function DropzoneArea({ orgId, userId, onReceiptCreated }: {
       setQueue((p) => [...p, { id: tempId, name: file.name, status: 'uploading' }]);
 
       try {
-        // 1. Upload file
-        const uploadForm = new FormData();
-        uploadForm.append('file', file);
-        uploadForm.append('orgId', orgId);
-        uploadForm.append('userId', userId);
-        const uploadRes = await fetch('/api/receipts/upload', { method: 'POST', body: uploadForm });
-        if (!uploadRes.ok) {
-          const text = await uploadRes.text();
+        // 1. Get presigned upload URL (tiny request — just metadata)
+        const urlRes = await fetch('/api/receipts/upload-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orgId, userId, filename: file.name, contentType: file.type }),
+        });
+        if (!urlRes.ok) {
+          const text = await urlRes.text();
           let msg = 'Upload failed';
           try { msg = JSON.parse(text).error || msg; } catch { if (text) msg = text; }
           throw new Error(msg);
         }
-        const { path: filePath } = await uploadRes.json();
+        const { signedUrl, path: filePath } = await urlRes.json();
+
+        // 2. Upload directly to Supabase (bypasses Vercel payload limit entirely)
+        const putRes = await fetch(signedUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': file.type },
+          body: file,
+        });
+        if (!putRes.ok) throw new Error('Upload to storage failed');
 
         setItemStatus(tempId, 'processing');
 
-        // 2. OCR
+        // 3. OCR — server downloads from storage, no large payload through Vercel
         let ocr: any = null;
         try {
-          const ocrForm = new FormData();
-          ocrForm.append('file', file);
-          const ocrRes = await fetch('/api/receipts/ocr', { method: 'POST', body: ocrForm });
+          const ocrRes = await fetch('/api/receipts/ocr', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: filePath }),
+          });
           if (ocrRes.ok) ocr = await ocrRes.json();
         } catch { /* OCR optional */ }
 
