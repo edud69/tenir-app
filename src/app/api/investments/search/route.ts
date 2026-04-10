@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const data = await yahooFinance.search(q, { quotesCount: 8, newsCount: 0 }) as any;
+    const data = await (yahooFinance.search as any)(q, { quotesCount: 8, newsCount: 0 }, { validateResult: false });
     const quotes: any[] = data?.quotes ?? [];
 
     const results: SymbolSuggestion[] = quotes

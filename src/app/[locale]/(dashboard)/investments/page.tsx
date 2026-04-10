@@ -120,16 +120,17 @@ function SymbolSearch({ value, locked, onSelect, onClear }: {
   const [searching, setSearching] = useState(false);
   const [fetching, setFetching]   = useState(false);
   const [dropPos, setDropPos]     = useState<{ top: number; left: number; width: number } | null>(null);
-  const timerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const inputRef  = useRef<HTMLInputElement>(null);
-  const wrapRef   = useRef<HTMLDivElement>(null);
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
+  const timerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef   = useRef<HTMLInputElement>(null);
+  const wrapRef    = useRef<HTMLDivElement>(null);
+  const dropRef    = useRef<HTMLDivElement>(null);   // ref on the portaled dropdown
 
-  // Close dropdown on outside click
+  // Close dropdown only when click is outside BOTH the input wrapper AND the portaled dropdown
   useEffect(() => {
     function handler(e: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+      const inWrap = wrapRef.current?.contains(e.target as Node);
+      const inDrop = dropRef.current?.contains(e.target as Node);
+      if (!inWrap && !inDrop) setOpen(false);
     }
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -152,9 +153,9 @@ function SymbolSearch({ value, locked, onSelect, onClear }: {
       try {
         const res = await fetch(`/api/investments/search?q=${encodeURIComponent(query)}`);
         const data = await res.json();
-        setResults(data.results ?? []);
-        updatePos();
-        setOpen(true);
+        const list: SymbolSuggestion[] = data.results ?? [];
+        setResults(list);
+        if (list.length > 0) { updatePos(); setOpen(true); }
       } catch { setResults([]); }
       finally { setSearching(false); }
     }, 300);
@@ -189,31 +190,38 @@ function SymbolSearch({ value, locked, onSelect, onClear }: {
     );
   }
 
-  const dropdown = open && results.length > 0 && dropPos && mounted ? createPortal(
-    <div
-      style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, width: dropPos.width, zIndex: 9999 }}
-      className="bg-white rounded-xl border border-gray-200 shadow-2xl overflow-hidden"
-      onMouseDown={(e) => e.preventDefault()} // prevent input blur before click fires
-    >
-      {results.map((s) => (
-        <button key={s.symbol} type="button" onMouseDown={() => handlePick(s)}
-          className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-tenir-50 transition-colors text-left">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-gray-900 text-sm">{s.symbol}</span>
-              <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded font-medium">{s.typeLabel}</span>
-              {s.exchange && <span className="text-xs text-gray-400">{s.exchange}</span>}
-            </div>
-            <p className="text-xs text-gray-500 truncate mt-0.5">{s.shortName}</p>
-          </div>
-        </button>
-      ))}
-      <p className="text-[10px] text-gray-400 px-4 py-2 border-t border-gray-50 bg-gray-50">
-        Sélectionnez un résultat pour verrouiller le symbole et charger le cours en temps réel
-      </p>
-    </div>,
-    document.body
-  ) : null;
+  // Portaled dropdown — escapes modal's overflow-y-auto
+  const dropdown = open && results.length > 0 && dropPos
+    ? createPortal(
+        <div
+          ref={dropRef}
+          style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, width: dropPos.width, zIndex: 9999 }}
+          className="bg-white rounded-xl border border-gray-200 shadow-2xl overflow-hidden"
+        >
+          {results.map((s) => (
+            <button
+              key={s.symbol}
+              type="button"
+              onClick={() => handlePick(s)}   // onClick (not onMouseDown) — fires after mousedown bubbles
+              className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-tenir-50 transition-colors text-left"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-gray-900 text-sm">{s.symbol}</span>
+                  <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded font-medium">{s.typeLabel}</span>
+                  {s.exchange && <span className="text-xs text-gray-400">{s.exchange}</span>}
+                </div>
+                <p className="text-xs text-gray-500 truncate mt-0.5">{s.shortName}</p>
+              </div>
+            </button>
+          ))}
+          <p className="text-[10px] text-gray-400 px-4 py-2 border-t border-gray-50 bg-gray-50">
+            Sélectionnez un résultat pour verrouiller le symbole et charger le cours en temps réel
+          </p>
+        </div>,
+        document.body
+      )
+    : null;
 
   return (
     <div ref={wrapRef} className="relative">
