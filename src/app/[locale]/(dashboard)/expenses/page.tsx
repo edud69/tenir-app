@@ -525,6 +525,110 @@ function TransactionModal({
   );
 }
 
+// ─── Transaction Detail Modal ─────────────────────────────────────────────────
+
+function TransactionDetailModal({
+  tx, onClose, onEdit, onDelete, onReceipt, categoryOptions,
+}: {
+  tx: Transaction;
+  onClose: () => void;
+  onEdit: (tx: Transaction) => void;
+  onDelete: (id: string) => void;
+  onReceipt: (tx: Transaction) => void;
+  categoryOptions: { value: string; label: string }[];
+}) {
+  const catLabel = categoryOptions.find((c) => c.value === tx.category)?.label || tx.category;
+  const typeColors: Record<string, string> = {
+    expense: 'text-red-600 bg-red-50',
+    income: 'text-emerald-600 bg-emerald-50',
+    dividend: 'text-blue-600 bg-blue-50',
+    capital_gain: 'text-purple-600 bg-purple-50',
+    interest: 'text-sky-600 bg-sky-50',
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
+          <div className="min-w-0 flex-1">
+            <p className="text-base font-semibold text-gray-900 truncate">{tx.description}</p>
+            {tx.vendor && <p className="text-xs text-gray-400 mt-0.5">{tx.vendor}</p>}
+          </div>
+          <button onClick={onClose} className="w-7 h-7 ml-3 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-700 transition-colors flex-shrink-0">
+            <X size={15} />
+          </button>
+        </div>
+
+        {/* Amount hero */}
+        <div className="px-6 py-5 text-center border-b border-gray-50">
+          <p className={cn('text-3xl font-bold', tx.amount < 0 ? 'text-red-600' : 'text-emerald-600')}>
+            {tx.amount < 0 ? '−' : '+'}{formatCurrency(Math.abs(tx.amount))}
+          </p>
+          <div className="flex items-center justify-center gap-2 mt-2">
+            <span className={cn('text-xs font-semibold px-2.5 py-1 rounded-full capitalize', typeColors[tx.type] || 'text-gray-600 bg-gray-100')}>
+              {tx.type === 'capital_gain' ? 'Capital gain' : tx.type}
+            </span>
+            {tx.receipt_id && (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-tenir-50 text-tenir-600">
+                <Paperclip size={10} /> Receipt
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Fields */}
+        <div className="px-6 py-4 grid grid-cols-2 gap-x-6 gap-y-4">
+          <div>
+            <p className="text-xs text-gray-400 mb-0.5">Date</p>
+            <p className="text-sm font-medium text-gray-900">{formatDate(tx.date)}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-400 mb-0.5">Category</p>
+            <p className="text-sm font-medium text-gray-900">{catLabel || '—'}</p>
+          </div>
+          {tx.vendor && (
+            <div className="col-span-2">
+              <p className="text-xs text-gray-400 mb-0.5">Vendor</p>
+              <p className="text-sm font-medium text-gray-900">{tx.vendor}</p>
+            </div>
+          )}
+          {tx.is_recurring && (
+            <div>
+              <p className="text-xs text-gray-400 mb-0.5">Recurring</p>
+              <p className="text-sm font-medium text-gray-900 capitalize">{tx.recurrence_frequency || 'Yes'}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="px-6 pb-5 flex gap-2 border-t border-gray-50 pt-4">
+          <button
+            onClick={() => onReceipt(tx)}
+            className={cn('flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-colors flex-1 justify-center',
+              tx.receipt_id ? 'bg-tenir-50 text-tenir-600 hover:bg-tenir-100' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')}
+          >
+            <Paperclip size={14} />
+            {tx.receipt_id ? 'View receipt' : 'Attach receipt'}
+          </button>
+          <button
+            onClick={() => onEdit(tx)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors flex-1 justify-center"
+          >
+            <Edit2 size={14} /> Edit
+          </button>
+          <button
+            onClick={() => onDelete(tx.id)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SummaryCard({
   title,
   value,
@@ -575,6 +679,8 @@ export default function ExpensesPage() {
   const [txLoading, setTxLoading] = useState(false);
   const [txError, setTxError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editTx, setEditTx] = useState<Transaction | null>(null);
+  const [viewTx, setViewTx] = useState<Transaction | null>(null);
   const [receiptModalTx, setReceiptModalTx] = useState<Transaction | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>(() => searchParams.get('search') ?? '');
   const [typeFilter, setTypeFilter] = useState<string>('all');
@@ -665,6 +771,33 @@ export default function ExpensesPage() {
         .single();
       if (error) throw error;
       setTransactions([newTx, ...transactions]);
+    } catch (e: any) {
+      setTxError(e.message);
+    }
+  };
+
+  const handleEditTransaction = async (data: ModalFormData) => {
+    if (!editTx) return;
+    try {
+      const { data: updated, error } = await (supabase as any)
+        .from('transactions')
+        .update({
+          type: data.type,
+          category: data.category,
+          date: data.date,
+          description: data.description,
+          amount: data.amount,
+          vendor: data.vendor || null,
+          is_recurring: data.is_recurring,
+          recurrence_frequency: data.recurrence_frequency || null,
+        })
+        .eq('id', editTx.id)
+        .select()
+        .single();
+      if (error) throw error;
+      setTransactions((prev) => prev.map((tx) => tx.id === editTx.id ? updated : tx));
+      // update viewTx if it's open on the same record
+      if (viewTx?.id === editTx.id) setViewTx(updated);
     } catch (e: any) {
       setTxError(e.message);
     }
@@ -816,7 +949,7 @@ export default function ExpensesPage() {
                   <TableBody>
                     {filteredTransactions.length > 0 ? (
                       filteredTransactions.map((tx) => (
-                        <TableRow key={tx.id}>
+                        <TableRow key={tx.id} onClick={() => setViewTx(tx)} className="cursor-pointer">
                           <TableCell>{formatDate(tx.date)}</TableCell>
                           <TableCell>
                             <div>
@@ -859,11 +992,11 @@ export default function ExpensesPage() {
                               {formatCurrency(tx.amount)}
                             </span>
                           </TableCell>
-                          <TableCell align="center">
+                          <TableCell align="center" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-center gap-1.5">
                               <button
                                 title={tx.receipt_id ? 'Manage receipt' : 'Attach receipt'}
-                                onClick={() => setReceiptModalTx(tx)}
+                                onClick={(e) => { e.stopPropagation(); setReceiptModalTx(tx); }}
                                 className={cn(
                                   'p-1.5 rounded-lg transition-colors',
                                   tx.receipt_id
@@ -873,12 +1006,17 @@ export default function ExpensesPage() {
                               >
                                 <Paperclip size={14} />
                               </button>
-                              <button className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-gray-700">
+                              <button
+                                title="Edit"
+                                onClick={(e) => { e.stopPropagation(); setEditTx(tx); }}
+                                className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-gray-700"
+                              >
                                 <Edit2 size={14} />
                               </button>
                               <button
+                                title="Delete"
                                 className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-gray-400 hover:text-red-600"
-                                onClick={() => handleDeleteTransaction(tx.id)}
+                                onClick={(e) => { e.stopPropagation(); handleDeleteTransaction(tx.id); }}
                               >
                                 <Trash2 size={14} />
                               </button>
@@ -936,11 +1074,34 @@ export default function ExpensesPage() {
         </div>
       </div>
 
+      {/* Add transaction */}
       <TransactionModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSubmit={handleAddTransaction}
       />
+
+      {/* Edit transaction */}
+      {editTx && (
+        <TransactionModal
+          isOpen={true}
+          onClose={() => setEditTx(null)}
+          onSubmit={handleEditTransaction}
+          initialData={editTx}
+        />
+      )}
+
+      {/* View transaction detail */}
+      {viewTx && (
+        <TransactionDetailModal
+          tx={viewTx}
+          onClose={() => setViewTx(null)}
+          onEdit={(tx) => { setViewTx(null); setEditTx(tx); }}
+          onDelete={(id) => { setViewTx(null); handleDeleteTransaction(id); }}
+          onReceipt={(tx) => { setViewTx(null); setReceiptModalTx(tx); }}
+          categoryOptions={categoryOptions}
+        />
+      )}
 
       {receiptModalTx && orgId && user && (
         <TransactionReceiptModal
