@@ -11,6 +11,7 @@ import {
   TrendingUp,
   Calculator,
   FileText,
+  CreditCard,
   Settings,
   Bot,
   X,
@@ -48,8 +49,9 @@ export default function Sidebar({ user, locale }: SidebarProps) {
     { href: `/${locale}/receipts`,    icon: Receipt,         label: t('receipts'),    key: 'receipts' },
     { href: `/${locale}/expenses`,    icon: Wallet,          label: t('expenses'),    key: 'expenses' },
     { href: `/${locale}/investments`, icon: TrendingUp,      label: t('investments'), key: 'investments' },
-    { href: `/${locale}/taxes`,       icon: Calculator,      label: t('taxes'),       key: 'taxes' },
-    { href: `/${locale}/forms`,       icon: FileText,        label: t('forms'),       key: 'forms' },
+    { href: `/${locale}/taxes`,        icon: Calculator,      label: t('taxes'),        key: 'taxes' },
+    { href: `/${locale}/tax-payments`, icon: CreditCard,     label: t('taxPayments'),  key: 'tax-payments' },
+    { href: `/${locale}/forms`,        icon: FileText,        label: t('forms'),        key: 'forms' },
   ];
 
   const isActive = (href: string) => {
