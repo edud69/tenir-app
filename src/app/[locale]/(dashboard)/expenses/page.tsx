@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
 import { Table, TableBody, TableHead, TableHeader, TableRow, TableCell } from '@/components/ui/table';
-import { Plus, Edit2, Trash2, ArrowUpRight, ArrowDownLeft, Paperclip, Upload, Link2, Unlink, FileText, ImageOff, Loader2, CheckCircle, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, ArrowUpRight, ArrowDownLeft, Paperclip, Upload, Link2, Unlink, FileText, ImageOff, Loader2, CheckCircle, X, ExternalLink } from 'lucide-react';
 import { useOrganization } from '@/hooks/useOrganization';
 import { createClient } from '@/lib/supabase/client';
 
@@ -67,6 +67,45 @@ function SignedImage({ filePath, fileName }: { filePath: string | null; fileName
   if (isPdf) return <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0"><FileText size={16} className="text-gray-400" /></div>;
   if (err || !url) return <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0"><ImageOff size={14} className="text-gray-300" /></div>;
   return <img src={url} alt={fileName || ''} className="w-10 h-10 rounded-lg object-cover flex-shrink-0 border border-gray-100" onError={() => setErr(true)} />;
+}
+
+function ReceiptImagePreview({ filePath, fileName }: { filePath: string | null; fileName: string | null }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState(false);
+  const isPdf = (fileName || filePath || '').toLowerCase().endsWith('.pdf');
+
+  useEffect(() => {
+    if (!filePath) { setLoading(false); return; }
+    fetch(`/api/receipts/signed-url?path=${encodeURIComponent(filePath)}`)
+      .then((r) => r.json())
+      .then(({ url: u }) => { setUrl(u ?? null); setLoading(false); })
+      .catch(() => { setErr(true); setLoading(false); });
+  }, [filePath]);
+
+  if (isPdf) return (
+    <div className="w-full h-36 bg-gray-50 border border-gray-100 rounded-xl flex flex-col items-center justify-center gap-2">
+      <FileText size={28} className="text-gray-300" />
+      <span className="text-xs text-gray-400">Document PDF</span>
+      {url && <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-tenir-600 hover:underline flex items-center gap-1"><ExternalLink size={10} /> Ouvrir</a>}
+    </div>
+  );
+  if (loading) return <div className="w-full h-36 bg-gray-50 border border-gray-100 rounded-xl flex items-center justify-center"><Loader2 size={18} className="animate-spin text-gray-300" /></div>;
+  if (err || !url) return (
+    <div className="w-full h-36 bg-gray-50 border border-gray-100 rounded-xl flex flex-col items-center justify-center gap-2">
+      <ImageOff size={20} className="text-gray-300" />
+      <span className="text-xs text-gray-400">Aperçu non disponible</span>
+    </div>
+  );
+  return (
+    <div className="relative w-full rounded-xl overflow-hidden border border-gray-100">
+      <img src={url} alt={fileName || 'Reçu'} className="w-full max-h-52 object-contain bg-gray-50" onError={() => setErr(true)} />
+      <a href={url} target="_blank" rel="noopener noreferrer"
+        className="absolute bottom-2 right-2 flex items-center gap-1 text-xs bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg text-tenir-600 hover:text-tenir-700 font-medium shadow-sm border border-gray-100">
+        <ExternalLink size={10} /> Plein écran
+      </a>
+    </div>
+  );
 }
 
 type ReceiptTab = 'link' | 'upload';
@@ -617,40 +656,59 @@ function TransactionDetailModal({
           )}
         </div>
 
-        {/* Receipt preview */}
-        {linkedReceipt && (
-          <div className="px-6 pb-4 border-t border-gray-50 pt-4">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Reçu</p>
-            <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
-              <SignedImage filePath={linkedReceipt.file_path} fileName={linkedReceipt.file_name} />
-              <div className="flex-1 min-w-0">
-                {linkedReceipt.vendor && (
-                  <p className="text-sm font-semibold text-gray-900 truncate">{linkedReceipt.vendor}</p>
-                )}
-                {linkedReceipt.amount != null && (
-                  <p className="text-sm font-medium text-gray-700">{formatCurrency(linkedReceipt.amount)}</p>
-                )}
-                {linkedReceipt.date && (
-                  <p className="text-xs text-gray-400 mt-0.5">{formatDate(linkedReceipt.date)}</p>
-                )}
-                {(linkedReceipt.gst_amount != null || linkedReceipt.qst_amount != null) && (
-                  <div className="flex gap-3 mt-1.5">
-                    {linkedReceipt.gst_amount != null && (
-                      <span className="text-xs text-gray-500">TPS {formatCurrency(linkedReceipt.gst_amount)}</span>
-                    )}
-                    {linkedReceipt.qst_amount != null && (
-                      <span className="text-xs text-gray-500">TVQ {formatCurrency(linkedReceipt.qst_amount)}</span>
-                    )}
-                  </div>
-                )}
-              </div>
+        {/* Receipt section */}
+        {tx.receipt_id && (
+          <div className="border-t border-gray-100">
+            <div className="px-6 pt-4 pb-1 flex items-center justify-between">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Reçu</p>
               <button
                 onClick={() => onReceipt(tx)}
-                className="flex-shrink-0 text-xs text-tenir-600 hover:text-tenir-700 font-medium flex items-center gap-1"
+                className="text-xs text-tenir-600 hover:text-tenir-700 font-medium flex items-center gap-1"
               >
                 <Edit2 size={11} /> Gérer
               </button>
             </div>
+            {linkedReceipt ? (
+              <div className="px-6 pb-5 space-y-3">
+                <ReceiptImagePreview filePath={linkedReceipt.file_path} fileName={linkedReceipt.file_name} />
+                <div className="grid grid-cols-2 gap-x-5 gap-y-2.5">
+                  {linkedReceipt.vendor && (
+                    <div className="col-span-2">
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Fournisseur</p>
+                      <p className="text-sm font-semibold text-gray-900">{linkedReceipt.vendor}</p>
+                    </div>
+                  )}
+                  {linkedReceipt.amount != null && (
+                    <div>
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Montant</p>
+                      <p className="text-sm font-semibold text-gray-900">{formatCurrency(linkedReceipt.amount)}</p>
+                    </div>
+                  )}
+                  {linkedReceipt.date && (
+                    <div>
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Date</p>
+                      <p className="text-sm font-semibold text-gray-900">{formatDate(linkedReceipt.date)}</p>
+                    </div>
+                  )}
+                  {linkedReceipt.gst_amount != null && (
+                    <div>
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">TPS</p>
+                      <p className="text-sm font-medium text-gray-700">{formatCurrency(linkedReceipt.gst_amount)}</p>
+                    </div>
+                  )}
+                  {linkedReceipt.qst_amount != null && (
+                    <div>
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">TVQ</p>
+                      <p className="text-sm font-medium text-gray-700">{formatCurrency(linkedReceipt.qst_amount)}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="px-6 pb-5 flex items-center gap-2 text-sm text-gray-400">
+                <Loader2 size={14} className="animate-spin" /> Chargement…
+              </div>
+            )}
           </div>
         )}
 
@@ -1073,8 +1131,8 @@ export default function ExpensesPage() {
                           <TableCell align="center" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center justify-center gap-1.5">
                               <button
-                                title={tx.receipt_id ? 'Manage receipt' : 'Attach receipt'}
-                                onClick={(e) => { e.stopPropagation(); setReceiptModalTx(tx); }}
+                                title={tx.receipt_id ? 'Voir le reçu' : 'Attacher un reçu'}
+                                onClick={(e) => { e.stopPropagation(); tx.receipt_id ? setViewTx(tx) : setReceiptModalTx(tx); }}
                                 className={cn(
                                   'p-1.5 rounded-lg transition-colors',
                                   tx.receipt_id
