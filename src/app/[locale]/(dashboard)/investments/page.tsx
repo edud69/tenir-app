@@ -16,8 +16,9 @@ import {
   Plus, TrendingUp, DollarSign, ArrowUpRight, ArrowDownLeft, Trash2, Edit2,
   Building2, Home, ChevronDown, ChevronRight, Users, MapPin, Link2, Unlink,
   CheckCircle, AlertCircle, RefreshCw, Wifi, WifiOff, Search, X, Loader2,
-  Landmark, Receipt, PercentCircle,
+  Landmark, Receipt, PercentCircle, Upload, FileSpreadsheet, Sparkles,
 } from 'lucide-react';
+import type { ImportedInvestment } from '@/app/api/investments/import/route';
 import type { QuoteResult } from '@/app/api/investments/quote/route';
 import type { SymbolSuggestion } from '@/app/api/investments/search/route';
 import { createClient } from '@/lib/supabase/client';
@@ -372,6 +373,252 @@ function InvestmentModal({ isOpen, onClose, onSubmit, initialData }: {
         )}
       </div>
     </Modal>
+  );
+}
+
+// ─── Import Investments Modal ─────────────────────────────────────────────────
+
+type ImportPhase = 'idle' | 'parsing' | 'preview' | 'importing' | 'done' | 'error';
+
+const TYPE_OPTIONS = [
+  { value: 'stock', label: 'Action' }, { value: 'etf', label: 'FNB/ETF' },
+  { value: 'mutual_fund', label: 'Fonds commun' }, { value: 'bond', label: 'Obligation' },
+  { value: 'gic', label: 'CPG' }, { value: 'other', label: 'Autre' },
+];
+
+function ImportInvestmentsModal({ isOpen, onClose, onImport }: {
+  isOpen: boolean;
+  onClose: () => void;
+  onImport: (investments: ImportedInvestment[]) => Promise<void>;
+}) {
+  const [phase, setPhase] = useState<ImportPhase>('idle');
+  const [rows, setRows] = useState<(ImportedInvestment & { selected: boolean })[]>([]);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+  const [fileName, setFileName] = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setPhase('idle');
+      setRows([]);
+      setErrMsg(null);
+      setFileName('');
+    }
+  }, [isOpen]);
+
+  async function handleFile(file: File) {
+    setFileName(file.name);
+    setPhase('parsing');
+    setErrMsg(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/investments/import', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Import failed');
+      setRows((data.investments as ImportedInvestment[]).map((inv) => ({ ...inv, selected: true })));
+      setPhase('preview');
+    } catch (e: any) {
+      setErrMsg(e.message || 'Erreur');
+      setPhase('error');
+    }
+  }
+
+  async function handleConfirm() {
+    const selected = rows.filter((r) => r.selected);
+    if (!selected.length) return;
+    setPhase('importing');
+    try {
+      await onImport(selected);
+      setPhase('done');
+    } catch (e: any) {
+      setErrMsg(e.message);
+      setPhase('error');
+    }
+  }
+
+  const toggleRow = (i: number) => setRows((prev) => prev.map((r, idx) => idx === i ? { ...r, selected: !r.selected } : r));
+  const toggleAll = (v: boolean) => setRows((prev) => prev.map((r) => ({ ...r, selected: v })));
+  const selectedCount = rows.filter((r) => r.selected).length;
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-tenir-50 flex items-center justify-center">
+              <Sparkles size={16} className="text-tenir-600" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">Importer des placements</h2>
+              <p className="text-xs text-gray-400 mt-0.5">PDF, Excel, CSV, OFX — l'IA normalise automatiquement</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400">✕</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6">
+
+          {/* ── Idle: dropzone ── */}
+          {phase === 'idle' && (
+            <div
+              className="border-2 border-dashed border-gray-200 rounded-2xl p-12 text-center cursor-pointer hover:border-tenir-300 hover:bg-tenir-50/30 transition-all"
+              onClick={() => fileRef.current?.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
+            >
+              <input ref={fileRef} type="file"
+                accept=".pdf,.xlsx,.xls,.xlsm,.csv,.txt,.ofx,.qfx,.tsv"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+              <FileSpreadsheet size={36} className="mx-auto text-gray-300 mb-4" />
+              <p className="font-semibold text-gray-700 mb-1">Glisser-déposer ou cliquer pour choisir</p>
+              <p className="text-sm text-gray-400">PDF · Excel (xlsx/xls) · CSV · OFX/QFX · TXT</p>
+              <p className="text-xs text-gray-300 mt-2">Relevé de courtage, export portefeuille, historique de transactions…</p>
+            </div>
+          )}
+
+          {/* ── Parsing ── */}
+          {phase === 'parsing' && (
+            <div className="text-center py-16">
+              <div className="w-14 h-14 rounded-2xl bg-tenir-50 border border-tenir-100 flex items-center justify-center mx-auto mb-4">
+                <Sparkles size={24} className="text-tenir-500 animate-pulse" />
+              </div>
+              <p className="font-semibold text-gray-800 mb-1">Analyse en cours…</p>
+              <p className="text-sm text-gray-400">{fileName}</p>
+              <p className="text-xs text-gray-300 mt-2">L'IA extrait et normalise les données de placement</p>
+            </div>
+          )}
+
+          {/* ── Error ── */}
+          {phase === 'error' && (
+            <div className="text-center py-12">
+              <AlertCircle size={36} className="mx-auto text-red-400 mb-3" />
+              <p className="font-semibold text-gray-800 mb-1">Échec de l'analyse</p>
+              <p className="text-sm text-red-500 mb-6">{errMsg}</p>
+              <button onClick={() => setPhase('idle')} className="text-sm text-tenir-600 hover:text-tenir-700 font-medium">
+                ← Réessayer avec un autre fichier
+              </button>
+            </div>
+          )}
+
+          {/* ── Done ── */}
+          {phase === 'done' && (
+            <div className="text-center py-12">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center mx-auto mb-4">
+                <CheckCircle size={24} className="text-emerald-500" />
+              </div>
+              <p className="font-semibold text-gray-800 mb-1">Import réussi</p>
+              <p className="text-sm text-gray-500">{selectedCount} placement{selectedCount > 1 ? 's' : ''} ajouté{selectedCount > 1 ? 's' : ''} au portefeuille</p>
+            </div>
+          )}
+
+          {/* ── Importing ── */}
+          {phase === 'importing' && (
+            <div className="text-center py-12">
+              <Loader2 size={32} className="mx-auto text-tenir-500 animate-spin mb-3" />
+              <p className="font-semibold text-gray-800">Ajout des placements…</p>
+            </div>
+          )}
+
+          {/* ── Preview table ── */}
+          {phase === 'preview' && (
+            <>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="font-semibold text-gray-800">{rows.length} placement{rows.length > 1 ? 's' : ''} détecté{rows.length > 1 ? 's' : ''}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Vérifiez les données avant de confirmer l'import</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => toggleAll(true)} className="text-xs text-tenir-600 hover:text-tenir-700 font-medium">Tout sélectionner</button>
+                  <button onClick={() => toggleAll(false)} className="text-xs text-gray-400 hover:text-gray-600 font-medium">Tout désélectionner</button>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-gray-100">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th className="w-8 px-3 py-2.5"></th>
+                      <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Symbole / Nom</th>
+                      <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Type</th>
+                      <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Titres</th>
+                      <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Prix/titre</th>
+                      <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Date</th>
+                      <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Devise · Compte</th>
+                      <th className="text-center px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Fiabilité</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {rows.map((row, i) => (
+                      <tr key={i} className={cn('transition-colors', row.selected ? 'bg-white hover:bg-gray-50' : 'bg-gray-50/50 opacity-50')}>
+                        <td className="px-3 py-2.5">
+                          <input type="checkbox" checked={row.selected} onChange={() => toggleRow(i)}
+                            className="w-4 h-4 text-tenir-600 rounded accent-tenir-500" />
+                        </td>
+                        <td className="px-3 py-2.5">
+                          {row.symbol && <span className="font-bold text-tenir-600 text-xs mr-1.5">{row.symbol}</span>}
+                          <span className="text-gray-700 text-xs">{row.name}</span>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                            {TYPE_OPTIONS.find((t) => t.value === row.type)?.label ?? row.type}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-right font-mono text-xs text-gray-800">{row.shares.toLocaleString('fr-CA', { maximumFractionDigits: 4 })}</td>
+                        <td className="px-3 py-2.5 text-right font-mono text-xs text-gray-800">{formatCurrency(row.purchase_price)}</td>
+                        <td className="px-3 py-2.5 text-xs text-gray-500">{row.purchase_date ?? '—'}</td>
+                        <td className="px-3 py-2.5 text-xs text-gray-500">
+                          {row.currency}
+                          {row.account_type && <span className="ml-1 text-gray-300">· {row.account_type}</span>}
+                        </td>
+                        <td className="px-3 py-2.5 text-center">
+                          <span className={cn('text-xs px-1.5 py-0.5 rounded-full font-medium',
+                            row.confidence === 'high' ? 'bg-emerald-50 text-emerald-600' :
+                            row.confidence === 'medium' ? 'bg-amber-50 text-amber-600' :
+                            'bg-red-50 text-red-500'
+                          )}>
+                            {row.confidence === 'high' ? 'Élevée' : row.confidence === 'medium' ? 'Moyenne' : 'Faible'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-xs text-gray-400 mt-3">
+                Les entrées à fiabilité faible ou moyenne méritent une vérification. Vous pourrez modifier chaque placement après l'import.
+              </p>
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        {phase === 'preview' && (
+          <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between flex-shrink-0">
+            <button onClick={() => setPhase('idle')} className="text-sm text-gray-400 hover:text-gray-600">← Changer de fichier</button>
+            <div className="flex gap-3">
+              <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 font-medium">Annuler</button>
+              <button
+                onClick={handleConfirm}
+                disabled={selectedCount === 0}
+                className={cn('px-5 py-2 rounded-xl text-sm font-semibold transition-all', selectedCount > 0 ? 'bg-tenir-500 text-white hover:bg-tenir-600' : 'bg-gray-100 text-gray-400 cursor-not-allowed')}
+              >
+                Importer {selectedCount > 0 ? `(${selectedCount})` : ''}
+              </button>
+            </div>
+          </div>
+        )}
+        {phase === 'done' && (
+          <div className="px-6 py-4 border-t border-gray-100 flex justify-end flex-shrink-0">
+            <button onClick={onClose} className="px-5 py-2 rounded-xl text-sm font-semibold bg-tenir-500 text-white hover:bg-tenir-600 transition-all">Fermer</button>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -1048,6 +1295,7 @@ export default function InvestmentsPage() {
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [dividends, setDividends] = useState<DividendRecord[]>([]);
   const [isInvModalOpen, setIsInvModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [editInvestment, setEditInvestment] = useState<(InvestmentFormData & { id: string }) | null>(null);
   const [quotes, setQuotes] = useState<Record<string, QuoteResult>>({});
   const [quotesLoading, setQuotesLoading] = useState(false);
@@ -1179,6 +1427,28 @@ export default function InvestmentsPage() {
     });
     if (error) setError(error.message);
     else fetchData();
+  };
+
+  const handleBulkImport = async (imports: ImportedInvestment[]) => {
+    if (!orgId) return;
+    const rows = imports.map((inv) => ({
+      organization_id: orgId,
+      symbol: inv.symbol ?? 'N/A',
+      name: inv.name,
+      type: inv.type,
+      shares: inv.shares,
+      purchase_price: inv.purchase_price,
+      purchase_date: inv.purchase_date ?? new Date().toISOString().split('T')[0],
+      adjusted_cost_base: inv.purchase_price,
+      current_price: null,
+      currency: inv.currency,
+      account_type: inv.account_type || null,
+      notes: null,
+      sold: false,
+    }));
+    const { error } = await (supabase as any).from('investments').insert(rows);
+    if (error) throw new Error(error.message);
+    await fetchData();
   };
 
   const handleUpdateInvestment = async (data: InvestmentFormData) => {
@@ -1388,7 +1658,13 @@ export default function InvestmentsPage() {
 
               {/* Refresh bar */}
               <div className="flex items-center justify-between mb-6">
-                <Button variant="primary" icon={<Plus size={18} />} onClick={() => setIsInvModalOpen(true)}>{t('addInvestment')}</Button>
+                <div className="flex items-center gap-2">
+                  <Button variant="primary" icon={<Plus size={18} />} onClick={() => setIsInvModalOpen(true)}>{t('addInvestment')}</Button>
+                  <button onClick={() => setIsImportModalOpen(true)}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium border border-tenir-200 text-tenir-600 bg-tenir-50 hover:bg-tenir-100 transition-all">
+                    <Upload size={15} /> Importer
+                  </button>
+                </div>
                 <div className="flex items-center gap-3">
                   {quotesError && (
                     <div className="flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 border border-amber-100 px-3 py-1.5 rounded-xl">
@@ -1623,6 +1899,12 @@ export default function InvestmentsPage() {
 
       {/* Modals */}
       <InvestmentModal isOpen={isInvModalOpen} onClose={() => setIsInvModalOpen(false)} onSubmit={handleAddInvestment} />
+
+      <ImportInvestmentsModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onImport={handleBulkImport}
+      />
 
       {editInvestment && (
         <InvestmentModal
