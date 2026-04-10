@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { formatCurrency, formatDate, formatPercent, cn } from '@/lib/utils';
 import Header from '@/components/layout/header';
@@ -12,11 +12,12 @@ import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
 import { Table, TableBody, TableHead, TableHeader, TableRow, TableCell } from '@/components/ui/table';
 import {
-  Plus, TrendingUp, DollarSign, ArrowUpRight, ArrowDownLeft, Trash2,
+  Plus, TrendingUp, DollarSign, ArrowUpRight, ArrowDownLeft, Trash2, Edit2,
   Building2, Home, ChevronDown, ChevronRight, Users, MapPin, Link2, Unlink,
-  CheckCircle, AlertCircle, RefreshCw, Wifi, WifiOff,
+  CheckCircle, AlertCircle, RefreshCw, Wifi, WifiOff, Search, X, Loader2,
 } from 'lucide-react';
 import type { QuoteResult } from '@/app/api/investments/quote/route';
+import type { SymbolSuggestion } from '@/app/api/investments/search/route';
 import { createClient } from '@/lib/supabase/client';
 import { useOrganization } from '@/hooks/useOrganization';
 
@@ -101,45 +102,222 @@ interface InvestmentFormData {
   currency: string; account_type: string; notes: string;
 }
 
+const YTYPE_TO_APP: Record<string, string> = {
+  EQUITY: 'stock', ETF: 'etf', MUTUALFUND: 'mutual_fund',
+  INDEX: 'other', FUTURE: 'other', CURRENCY: 'other',
+};
+
+function SymbolSearch({ value, locked, onSelect, onClear }: {
+  value: string;
+  locked: boolean;
+  onSelect: (s: SymbolSuggestion, price: number, currency: string) => void;
+  onClear: () => void;
+}) {
+  const [query, setQuery]       = useState(value);
+  const [results, setResults]   = useState<SymbolSuggestion[]>([]);
+  const [open, setOpen]         = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [fetching, setFetching] = useState(false);   // fetching live price after pick
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wrapRef  = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // Debounced search
+  useEffect(() => {
+    if (locked || query.length < 1) { setResults([]); return; }
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const res = await fetch(`/api/investments/search?q=${encodeURIComponent(query)}`);
+        const data = await res.json();
+        setResults(data.results ?? []);
+        setOpen(true);
+      } catch { setResults([]); }
+      finally { setSearching(false); }
+    }, 300);
+  }, [query, locked]);
+
+  async function handlePick(s: SymbolSuggestion) {
+    setOpen(false);
+    setQuery(s.symbol);
+    setFetching(true);
+    try {
+      const res  = await fetch(`/api/investments/quote?symbols=${s.symbol}`);
+      const data = await res.json();
+      const q    = data[s.symbol];
+      onSelect(s, q?.price ?? 0, q?.currency ?? 'CAD');
+    } catch {
+      onSelect(s, 0, 'CAD');
+    } finally { setFetching(false); }
+  }
+
+  if (locked) {
+    return (
+      <div>
+        <p className="text-xs font-medium text-gray-600 mb-1.5">Symbole</p>
+        <div className="flex items-center gap-2 px-3 py-2 bg-tenir-50 border border-tenir-200 rounded-xl">
+          <span className="font-bold text-tenir-700 text-sm">{value}</span>
+          {fetching && <Loader2 size={12} className="animate-spin text-tenir-400" />}
+          <button type="button" onClick={onClear} className="ml-auto text-gray-400 hover:text-gray-600">
+            <X size={13} />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <p className="text-xs font-medium text-gray-600 mb-1.5">Symbole <span className="text-red-400">*</span></p>
+      <div className="relative">
+        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+        <input
+          autoFocus
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => results.length > 0 && setOpen(true)}
+          placeholder="Rechercher RY.TO, AAPL, Banque Royale…"
+          className="w-full pl-8 pr-8 py-2 text-sm border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-tenir-400/30 focus:border-tenir-400 transition-all"
+        />
+        {searching && <Loader2 size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 animate-spin" />}
+      </div>
+      {open && results.length > 0 && (
+        <div className="absolute z-50 mt-1 w-full bg-white rounded-xl border border-gray-200 shadow-xl overflow-hidden">
+          {results.map((s) => (
+            <button key={s.symbol} type="button" onMouseDown={() => handlePick(s)}
+              className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-tenir-50 transition-colors text-left">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-gray-900 text-sm">{s.symbol}</span>
+                  <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded font-medium">{s.typeLabel}</span>
+                  {s.exchange && <span className="text-xs text-gray-400">{s.exchange}</span>}
+                </div>
+                <p className="text-xs text-gray-500 truncate mt-0.5">{s.shortName}</p>
+              </div>
+            </button>
+          ))}
+          <p className="text-[10px] text-gray-400 px-4 py-2 border-t border-gray-50 bg-gray-50">
+            Sélectionnez un résultat pour verrouiller le symbole et charger le cours en temps réel
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function InvestmentModal({ isOpen, onClose, onSubmit, initialData }: {
   isOpen: boolean; onClose: () => void;
   onSubmit: (data: InvestmentFormData) => void;
-  initialData?: InvestmentFormData;
+  initialData?: InvestmentFormData & { id?: string };
 }) {
   const t = useTranslations('investments');
   const commonT = useTranslations('common');
-  const [fd, setFd] = useState<InvestmentFormData>(initialData || {
+
+  const blank: InvestmentFormData = {
     symbol: '', name: '', type: 'stock', shares: 0,
     purchase_price: 0, purchase_date: new Date().toISOString().split('T')[0],
     current_price: 0, currency: 'CAD', account_type: '', notes: '',
-  });
-  useEffect(() => { if (initialData) setFd(initialData); }, [initialData]);
+  };
+
+  const [fd, setFd]         = useState<InvestmentFormData>(initialData ?? blank);
+  const [locked, setLocked] = useState(!!initialData?.symbol);
+
+  // Reset when modal opens/closes or initialData changes
+  useEffect(() => {
+    setFd(initialData ?? blank);
+    setLocked(!!initialData?.symbol);
+  }, [isOpen]);
+
+  function handleSymbolSelect(s: SymbolSuggestion, price: number, currency: string) {
+    setFd((prev) => ({
+      ...prev,
+      symbol:        s.symbol,
+      name:          s.shortName,
+      type:          YTYPE_TO_APP[s.type] ?? 'stock',
+      currency,
+      current_price: price,
+    }));
+    setLocked(true);
+  }
+
+  const canSubmit = locked && fd.shares > 0 && fd.purchase_price > 0;
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={initialData ? 'Edit Investment' : t('addInvestment')} size="lg"
-      footer={<div className="flex gap-3"><Button variant="ghost" fullWidth onClick={onClose}>{commonT('cancel')}</Button><Button variant="primary" fullWidth onClick={() => { onSubmit(fd); onClose(); }}>{commonT('save')}</Button></div>}>
-      <form className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <Input label={t('symbol')} value={fd.symbol} onChange={(e) => setFd({ ...fd, symbol: e.target.value })} placeholder="e.g., RBC" required />
-          <Input label="Name" value={fd.name} onChange={(e) => setFd({ ...fd, name: e.target.value })} required />
+    <Modal isOpen={isOpen} onClose={onClose}
+      title={initialData?.id ? 'Modifier le placement' : t('addInvestment')}
+      size="lg"
+      footer={
+        <div className="flex gap-3">
+          <Button variant="ghost" fullWidth onClick={onClose}>{commonT('cancel')}</Button>
+          <Button variant="primary" fullWidth disabled={!canSubmit} onClick={() => { onSubmit(fd); onClose(); }}>
+            {commonT('save')}
+          </Button>
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <Select label="Type" value={fd.type} onChange={(v) => setFd({ ...fd, type: v as string })} options={[
-            { value: 'stock', label: 'Stock' }, { value: 'etf', label: 'ETF' },
-            { value: 'bond', label: 'Bond' }, { value: 'gic', label: 'GIC' },
-            { value: 'mutual_fund', label: 'Mutual Fund' }, { value: 'other', label: 'Other' },
-          ]} />
-          <Select label="Currency" value={fd.currency} onChange={(v) => setFd({ ...fd, currency: v as string })}
-            options={[{ value: 'CAD', label: 'CAD' }, { value: 'USD', label: 'USD' }]} />
-        </div>
-        <div className="grid grid-cols-3 gap-4">
-          <Input label={t('shares')} type="number" step="0.01" value={fd.shares} onChange={(e) => setFd({ ...fd, shares: parseFloat(e.target.value) || 0 })} required />
-          <Input label={t('acb')} type="number" step="0.01" value={fd.purchase_price} onChange={(e) => setFd({ ...fd, purchase_price: parseFloat(e.target.value) || 0 })} helperText="Per share" required />
-          <Input label={t('currentValue')} type="number" step="0.01" value={fd.current_price} onChange={(e) => setFd({ ...fd, current_price: parseFloat(e.target.value) || 0 })} helperText="Per share" required />
-        </div>
-        <Input label="Purchase Date" type="date" value={fd.purchase_date} onChange={(e) => setFd({ ...fd, purchase_date: e.target.value })} />
-        <Input label="Notes" value={fd.notes} onChange={(e) => setFd({ ...fd, notes: e.target.value })} />
-      </form>
+      }>
+      <div className="space-y-4">
+        {/* Symbol search — locked once selected */}
+        <SymbolSearch
+          value={fd.symbol}
+          locked={locked}
+          onSelect={handleSymbolSelect}
+          onClear={() => { setFd({ ...fd, symbol: '', name: '', current_price: 0 }); setLocked(false); }}
+        />
+
+        {locked && (
+          <>
+            {/* Auto-filled name — editable */}
+            <Input label="Nom du titre" value={fd.name}
+              onChange={(e) => setFd({ ...fd, name: e.target.value })} required />
+
+            <div className="grid grid-cols-2 gap-4">
+              <Select label="Type" value={fd.type} onChange={(v) => setFd({ ...fd, type: v as string })} options={[
+                { value: 'stock', label: 'Action' }, { value: 'etf', label: 'FNB / ETF' },
+                { value: 'bond', label: 'Obligation' }, { value: 'gic', label: 'CPG' },
+                { value: 'mutual_fund', label: 'Fonds commun' }, { value: 'other', label: 'Autre' },
+              ]} />
+              <Select label="Devise" value={fd.currency} onChange={(v) => setFd({ ...fd, currency: v as string })}
+                options={[{ value: 'CAD', label: 'CAD' }, { value: 'USD', label: 'USD' }]} />
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <Input label="Nombre de titres" type="number" step="0.0001" value={fd.shares || ''}
+                onChange={(e) => setFd({ ...fd, shares: parseFloat(e.target.value) || 0 })} required />
+              <Input label="Prix d'achat / titre" type="number" step="0.01" value={fd.purchase_price || ''}
+                onChange={(e) => setFd({ ...fd, purchase_price: parseFloat(e.target.value) || 0 })}
+                helperText="Coût moyen" required />
+              <div>
+                <Input label="Cours actuel / titre" type="number" step="0.01" value={fd.current_price || ''}
+                  onChange={(e) => setFd({ ...fd, current_price: parseFloat(e.target.value) || 0 })}
+                  helperText="Chargé automatiquement" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="Date d'achat" type="date" value={fd.purchase_date}
+                onChange={(e) => setFd({ ...fd, purchase_date: e.target.value })} />
+              <Input label="Notes" value={fd.notes}
+                onChange={(e) => setFd({ ...fd, notes: e.target.value })} />
+            </div>
+
+            {/* Live price preview */}
+            {fd.current_price > 0 && fd.shares > 0 && (
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100 text-sm">
+                <span className="text-gray-500">Valeur marchande estimée</span>
+                <span className="font-bold text-gray-900">{formatCurrency(fd.current_price * fd.shares)} {fd.currency}</span>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </Modal>
   );
 }
@@ -519,6 +697,7 @@ export default function InvestmentsPage() {
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [dividends, setDividends] = useState<DividendRecord[]>([]);
   const [isInvModalOpen, setIsInvModalOpen] = useState(false);
+  const [editInvestment, setEditInvestment] = useState<(InvestmentFormData & { id: string }) | null>(null);
   const [quotes, setQuotes] = useState<Record<string, QuoteResult>>({});
   const [quotesLoading, setQuotesLoading] = useState(false);
   const [quotesError, setQuotesError] = useState<string | null>(null);
@@ -644,6 +823,36 @@ export default function InvestmentsPage() {
     });
     if (error) setError(error.message);
     else fetchData();
+  };
+
+  const handleUpdateInvestment = async (data: InvestmentFormData) => {
+    if (!editInvestment) return;
+    const { error } = await (supabase as any)
+      .from('investments')
+      .update({
+        symbol:        data.symbol,
+        name:          data.name,
+        type:          data.type,
+        shares:        data.shares,
+        purchase_price: data.purchase_price,
+        purchase_date: data.purchase_date,
+        adjusted_cost_base: data.purchase_price,
+        current_price: data.current_price || null,
+        currency:      data.currency,
+        account_type:  data.account_type || null,
+        notes:         data.notes || null,
+        updated_at:    new Date().toISOString(),
+      })
+      .eq('id', editInvestment.id);
+    if (error) setError(error.message);
+    else {
+      setInvestments((prev) => prev.map((inv) =>
+        inv.id === editInvestment.id
+          ? { ...inv, ...data, current_price: data.current_price || null }
+          : inv
+      ));
+    }
+    setEditInvestment(null);
   };
 
   const handleDeleteInvestment = async (id: string) => {
@@ -900,7 +1109,20 @@ export default function InvestmentsPage() {
                                   </p>
                                 </TableCell>
                                 <TableCell align="center">
-                                  <button onClick={() => handleDeleteInvestment(inv.id)} className="p-1.5 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={14} /></button>
+                                  <button
+                                    onClick={() => setEditInvestment({
+                                      id: inv.id,
+                                      symbol: inv.symbol, name: inv.name, type: inv.type,
+                                      shares: inv.shares, purchase_price: inv.purchase_price,
+                                      purchase_date: inv.purchase_date,
+                                      current_price: inv.current_price ?? 0,
+                                      currency: inv.currency, account_type: inv.account_type ?? '',
+                                      notes: inv.notes ?? '',
+                                    })}
+                                    className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-700 transition-colors"
+                                    title="Modifier"
+                                  ><Edit2 size={14} /></button>
+                                  <button onClick={() => handleDeleteInvestment(inv.id)} className="p-1.5 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-500 transition-colors" title="Supprimer"><Trash2 size={14} /></button>
                                 </TableCell>
                               </TableRow>
                             );
@@ -991,6 +1213,15 @@ export default function InvestmentsPage() {
 
       {/* Modals */}
       <InvestmentModal isOpen={isInvModalOpen} onClose={() => setIsInvModalOpen(false)} onSubmit={handleAddInvestment} />
+
+      {editInvestment && (
+        <InvestmentModal
+          isOpen={true}
+          onClose={() => setEditInvestment(null)}
+          onSubmit={handleUpdateInvestment}
+          initialData={editInvestment}
+        />
+      )}
 
       <PropertyModal isOpen={showPropertyModal} onClose={() => setShowPropertyModal(false)} onSubmit={handleAddProperty} />
 
