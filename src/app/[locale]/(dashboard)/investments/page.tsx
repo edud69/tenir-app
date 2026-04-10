@@ -14,8 +14,9 @@ import { Table, TableBody, TableHead, TableHeader, TableRow, TableCell } from '@
 import {
   Plus, TrendingUp, DollarSign, ArrowUpRight, ArrowDownLeft, Trash2,
   Building2, Home, ChevronDown, ChevronRight, Users, MapPin, Link2, Unlink,
-  CheckCircle, AlertCircle,
+  CheckCircle, AlertCircle, RefreshCw, Wifi, WifiOff,
 } from 'lucide-react';
+import type { QuoteResult } from '@/app/api/investments/quote/route';
 import { createClient } from '@/lib/supabase/client';
 import { useOrganization } from '@/hooks/useOrganization';
 
@@ -518,6 +519,10 @@ export default function InvestmentsPage() {
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [dividends, setDividends] = useState<DividendRecord[]>([]);
   const [isInvModalOpen, setIsInvModalOpen] = useState(false);
+  const [quotes, setQuotes] = useState<Record<string, QuoteResult>>({});
+  const [quotesLoading, setQuotesLoading] = useState(false);
+  const [quotesError, setQuotesError] = useState<string | null>(null);
+  const [quotesUpdatedAt, setQuotesUpdatedAt] = useState<Date | null>(null);
 
   // Real estate state
   const [properties, setProperties] = useState<RentalProperty[]>([]);
@@ -556,7 +561,18 @@ export default function InvestmentsPage() {
     }
   }, [orgId]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData().then(() => {
+      // Auto-refresh quotes after initial data load
+      // We read directly to avoid stale closure on `investments`
+      if (!orgId) return;
+      (supabase as any)
+        .from('investments').select('id,symbol,current_price').eq('organization_id', orgId).eq('sold', false)
+        .then(({ data }: any) => {
+          if (data?.length) refreshQuotes(data);
+        });
+    });
+  }, [fetchData, orgId]);
 
   // ── Portfolio metrics ──────────────────────────────────────────────────────
 
@@ -573,6 +589,50 @@ export default function InvestmentsPage() {
   const vacantCount        = allUnitsFlat.filter((u) => u.is_vacant).length;
 
   // ── Handlers — Investments ─────────────────────────────────────────────────
+
+  // ── Quote refresh ─────────────────────────────────────────────────────────
+
+  const refreshQuotes = useCallback(async (invList?: Investment[]) => {
+    const list = invList ?? investments;
+    const seen = new Set<string>();
+    const symbols = list.map((i) => i.symbol.toUpperCase()).filter((s) => { if (!s || seen.has(s)) return false; seen.add(s); return true; });
+    if (symbols.length === 0) return;
+
+    setQuotesLoading(true);
+    setQuotesError(null);
+    try {
+      const res = await fetch(`/api/investments/quote?symbols=${symbols.join(',')}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data: Record<string, QuoteResult> = await res.json();
+      if (data.error) throw new Error(data.error as any);
+
+      setQuotes(data);
+      setQuotesUpdatedAt(new Date());
+
+      // Persist updated prices to DB (only for symbols with valid quotes)
+      for (const inv of list) {
+        const q = data[inv.symbol.toUpperCase()];
+        if (!q || q.error || q.price === 0) continue;
+        if (Math.abs(q.price - (inv.current_price ?? 0)) < 0.0001) continue; // no change
+        await (supabase as any)
+          .from('investments')
+          .update({ current_price: q.price, updated_at: new Date().toISOString() })
+          .eq('id', inv.id);
+      }
+
+      // Update local state with new prices
+      setInvestments((prev) =>
+        prev.map((inv) => {
+          const q = data[inv.symbol.toUpperCase()];
+          return q && !q.error && q.price > 0 ? { ...inv, current_price: q.price } : inv;
+        })
+      );
+    } catch (e: any) {
+      setQuotesError(e.message || 'Impossible de récupérer les cours');
+    } finally {
+      setQuotesLoading(false);
+    }
+  }, [investments]);
 
   const handleAddInvestment = async (data: InvestmentFormData) => {
     if (!orgId) return;
@@ -702,16 +762,58 @@ export default function InvestmentsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 <PortfolioSummaryCard title={t('bookValue')} value={formatCurrency(portfolioBook)} subtitle="Coût de base rajusté" icon={DollarSign} />
                 <PortfolioSummaryCard title={t('marketValue')} value={formatCurrency(portfolioMarket)} subtitle="Valeur marchande actuelle" icon={TrendingUp} />
-                <PortfolioSummaryCard title={t('unrealizedGain')} value={formatCurrency(unrealizedGain)} subtitle={formatPercent(portfolioBook > 0 ? unrealizedGain / portfolioBook : 0)} icon={unrealizedGain >= 0 ? ArrowUpRight : ArrowDownLeft} />
+                <PortfolioSummaryCard
+                  title={t('unrealizedGain')}
+                  value={formatCurrency(unrealizedGain)}
+                  subtitle={`${unrealizedGain >= 0 ? '+' : ''}${portfolioBook > 0 ? ((unrealizedGain / portfolioBook) * 100).toFixed(2) : '0.00'}%`}
+                  icon={unrealizedGain >= 0 ? ArrowUpRight : ArrowDownLeft}
+                />
                 <PortfolioSummaryCard title={t('dividendIncome')} value={formatCurrency(ytdDividends)} subtitle="Cumulatif reçu" icon={DollarSign} />
               </div>
 
-              <div className="mb-6">
+              {/* Refresh bar */}
+              <div className="flex items-center justify-between mb-6">
                 <Button variant="primary" icon={<Plus size={18} />} onClick={() => setIsInvModalOpen(true)}>{t('addInvestment')}</Button>
+                <div className="flex items-center gap-3">
+                  {quotesError && (
+                    <div className="flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 border border-amber-100 px-3 py-1.5 rounded-xl">
+                      <WifiOff size={12} /> {quotesError}
+                    </div>
+                  )}
+                  {quotesUpdatedAt && !quotesError && (
+                    <span className="flex items-center gap-1.5 text-xs text-gray-400">
+                      <Wifi size={11} className="text-emerald-400" />
+                      Mis à jour {quotesUpdatedAt.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  )}
+                  <button
+                    onClick={() => refreshQuotes()}
+                    disabled={quotesLoading || investments.length === 0}
+                    className={cn(
+                      'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium border transition-all',
+                      quotesLoading
+                        ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-wait'
+                        : 'border-tenir-200 text-tenir-600 bg-tenir-50 hover:bg-tenir-100'
+                    )}
+                  >
+                    <RefreshCw size={13} className={quotesLoading ? 'animate-spin' : ''} />
+                    {quotesLoading ? 'Actualisation…' : 'Actualiser les cours'}
+                  </button>
+                </div>
               </div>
 
               <Card padding="none" shadow="sm" className="mb-8">
-                <CardHeader className="px-6 pt-6"><CardTitle level="h3">Titres ({investments.length})</CardTitle></CardHeader>
+                <CardHeader className="px-6 pt-6">
+                  <div className="flex items-center justify-between">
+                    <CardTitle level="h3">Titres ({investments.length})</CardTitle>
+                    {Object.keys(quotes).length > 0 && (
+                      <span className="text-xs text-gray-400 flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse" />
+                        Cours en temps réel
+                      </span>
+                    )}
+                  </div>
+                </CardHeader>
                 <CardContent>
                   {investments.length === 0 ? (
                     <div className="text-center py-12">
@@ -723,28 +825,79 @@ export default function InvestmentsPage() {
                       <Table hoverable>
                         <TableHeader>
                           <TableRow isHeader>
-                            <TableHead>Symbole</TableHead><TableHead>Nom</TableHead>
-                            <TableHead align="right">Actions</TableHead><TableHead align="right">CBR</TableHead>
-                            <TableHead align="right">Prix actuel</TableHead><TableHead align="right">Valeur marchande</TableHead>
-                            <TableHead align="right">G/P</TableHead><TableHead align="center">⋯</TableHead>
+                            <TableHead>Symbole</TableHead>
+                            <TableHead>Nom</TableHead>
+                            <TableHead align="right">Actions</TableHead>
+                            <TableHead align="right">CBR/action</TableHead>
+                            <TableHead align="right">Cours actuel</TableHead>
+                            <TableHead align="right">Var. jour</TableHead>
+                            <TableHead align="right">Valeur marchande</TableHead>
+                            <TableHead align="right">G/P non réalisé</TableHead>
+                            <TableHead align="center">⋯</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {investments.map((inv) => {
-                            const book = inv.shares * inv.purchase_price;
-                            const market = inv.shares * (inv.current_price ?? inv.purchase_price);
-                            const gl = market - book;
+                            const q = quotes[inv.symbol.toUpperCase()];
+                            const livePrice  = q && !q.error ? q.price : (inv.current_price ?? inv.purchase_price);
+                            const book       = inv.shares * inv.purchase_price;
+                            const market     = inv.shares * livePrice;
+                            const gl         = market - book;
+                            const glPct      = book > 0 ? (gl / book) * 100 : 0;
+                            const dayChange  = q && !q.error ? q.change : null;
+                            const dayPct     = q && !q.error ? q.changePercent : null;
+                            const hasLive    = q && !q.error && q.price > 0;
+
                             return (
                               <TableRow key={inv.id}>
-                                <TableCell className="font-semibold text-tenir-600">{inv.symbol}</TableCell>
-                                <TableCell><p className="font-medium text-gray-900">{inv.name}</p><p className="text-xs text-gray-500 capitalize">{inv.type.replace('_', ' ')}</p></TableCell>
-                                <TableCell align="right" className="font-medium">{inv.shares.toLocaleString('fr-CA', { maximumFractionDigits: 2 })}</TableCell>
-                                <TableCell align="right">{formatCurrency(inv.purchase_price)}</TableCell>
-                                <TableCell align="right" className="font-semibold">{formatCurrency(inv.current_price ?? inv.purchase_price)}</TableCell>
-                                <TableCell align="right" className="font-semibold">{formatCurrency(market)}</TableCell>
+                                <TableCell>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-tenir-600">{inv.symbol}</span>
+                                    {hasLive && (
+                                      <span className={cn('text-[10px] font-semibold px-1.5 py-0.5 rounded-full', q.marketState === 'REGULAR' ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-400')}>
+                                        {q.marketState === 'REGULAR' ? 'Ouvert' : 'Fermé'}
+                                      </span>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <p className="font-medium text-gray-900">{hasLive ? q.shortName : inv.name}</p>
+                                  <p className="text-xs text-gray-500 capitalize">{inv.type.replace('_', ' ')} · {inv.currency}</p>
+                                </TableCell>
+                                <TableCell align="right" className="font-medium tabular-nums">
+                                  {inv.shares.toLocaleString('fr-CA', { maximumFractionDigits: 4 })}
+                                </TableCell>
+                                <TableCell align="right" className="tabular-nums">{formatCurrency(inv.purchase_price)}</TableCell>
                                 <TableCell align="right">
-                                  <span className={cn('font-semibold', gl >= 0 ? 'text-emerald-600' : 'text-red-600')}>{formatCurrency(gl)}</span>
-                                  <p className={cn('text-xs', gl >= 0 ? 'text-emerald-500' : 'text-red-500')}>({gl >= 0 ? '+' : ''}{book > 0 ? ((gl / book) * 100).toFixed(1) : 0}%)</p>
+                                  <div className="flex flex-col items-end">
+                                    <span className={cn('font-semibold tabular-nums', hasLive ? 'text-gray-900' : 'text-gray-400')}>
+                                      {formatCurrency(livePrice)}
+                                    </span>
+                                    {hasLive && <span className="text-[10px] text-gray-400">{q.currency}</span>}
+                                  </div>
+                                </TableCell>
+                                <TableCell align="right">
+                                  {dayChange != null ? (
+                                    <div className="flex flex-col items-end">
+                                      <span className={cn('text-sm font-semibold tabular-nums', dayChange >= 0 ? 'text-emerald-600' : 'text-red-600')}>
+                                        {dayChange >= 0 ? '+' : ''}{formatCurrency(dayChange)}
+                                      </span>
+                                      <span className={cn('text-xs tabular-nums', dayChange >= 0 ? 'text-emerald-500' : 'text-red-400')}>
+                                        {dayPct != null ? `${dayChange >= 0 ? '+' : ''}${dayPct.toFixed(2)}%` : ''}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-gray-300 text-xs">—</span>
+                                  )}
+                                </TableCell>
+                                <TableCell align="right" className="font-semibold tabular-nums">{formatCurrency(market)}</TableCell>
+                                <TableCell align="right">
+                                  <span className={cn('font-semibold tabular-nums', gl >= 0 ? 'text-emerald-600' : 'text-red-600')}>
+                                    {gl >= 0 ? '+' : ''}{formatCurrency(gl)}
+                                  </span>
+                                  <p className={cn('text-xs tabular-nums', gl >= 0 ? 'text-emerald-500' : 'text-red-400')}>
+                                    ({gl >= 0 ? '+' : ''}{glPct.toFixed(2)}%)
+                                  </p>
                                 </TableCell>
                                 <TableCell align="center">
                                   <button onClick={() => handleDeleteInvestment(inv.id)} className="p-1.5 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={14} /></button>
