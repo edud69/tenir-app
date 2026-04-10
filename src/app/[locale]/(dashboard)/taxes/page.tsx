@@ -74,6 +74,7 @@ export default function TaxesPage() {
   const [calculating, setCalculating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paymentTotals, setPaymentTotals] = useState<{ federal: number; provincial: number }>({ federal: 0, provincial: 0 });
+  const [rentalProperties, setRentalProperties] = useState<any[]>([]);
 
   const yearOptions = [
     { value: '2026', label: '2026' },
@@ -86,7 +87,19 @@ export default function TaxesPage() {
     if (!orgId) return;
     fetchTaxProfile();
     fetchPaymentTotals();
+    fetchRentalProperties();
   }, [orgId, selectedYear]);
+
+  async function fetchRentalProperties() {
+    if (!orgId) return;
+    try {
+      const { data } = await (supabase as any)
+        .from('rental_properties')
+        .select('id,nickname,address,purchase_price,purchase_date,building_value_pct,mortgage_balance,mortgage_interest_rate,mortgage_payment_frequency,mortgage_payment_amount')
+        .eq('organization_id', orgId);
+      setRentalProperties(data || []);
+    } catch { /* non-blocking */ }
+  }
 
   async function fetchPaymentTotals() {
     if (!orgId) return;
@@ -506,6 +519,90 @@ export default function TaxesPage() {
               </div>
 
               {/* Integration model */}
+              {/* ── CCA / Amortissement immeubles ── */}
+              {rentalProperties.length > 0 && (
+                <div className="bg-white rounded-2xl border border-gray-200 p-6 mb-6">
+                  <div className="flex items-center gap-2.5 mb-5">
+                    <Building2 size={18} className="text-purple-400" />
+                    <h3 className="text-base font-semibold text-gray-900">Amortissement — Immeubles locatifs</h3>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-purple-50 text-purple-600 font-medium">Classe 1 · 4%</span>
+                  </div>
+                  <div className="space-y-4">
+                    {rentalProperties.map((prop: any) => {
+                      const buildingPct = prop.building_value_pct ?? 80;
+                      if (!prop.purchase_price || !prop.purchase_date) return (
+                        <div key={prop.id} className="p-4 rounded-xl bg-gray-50 border border-gray-100">
+                          <p className="text-sm font-medium text-gray-700">{prop.nickname || prop.address}</p>
+                          <p className="text-xs text-gray-400 mt-1">Prix d'achat ou date d'acquisition manquants — impossible de calculer la DPA.</p>
+                        </div>
+                      );
+                      const buildingCost = prop.purchase_price * (buildingPct / 100);
+                      const acquired = new Date(prop.purchase_date);
+                      const now = new Date();
+                      let yearsHeld = now.getFullYear() - acquired.getFullYear();
+                      if (now.getMonth() < acquired.getMonth() || (now.getMonth() === acquired.getMonth() && now.getDate() < acquired.getDate())) yearsHeld -= 1;
+                      let ucc = buildingCost;
+                      let annualCCA: number;
+                      if (yearsHeld <= 0) {
+                        annualCCA = buildingCost * 0.02; // half-year rule
+                      } else {
+                        ucc *= (1 - 0.02);
+                        for (let i = 1; i < yearsHeld; i++) ucc *= (1 - 0.04);
+                        annualCCA = ucc * 0.04;
+                      }
+                      // Mortgage annual interest (deductible)
+                      let annualInterest = 0;
+                      if (prop.mortgage_balance && prop.mortgage_interest_rate && prop.mortgage_payment_amount) {
+                        const periods = prop.mortgage_payment_frequency === 'weekly' ? 52 : prop.mortgage_payment_frequency === 'biweekly' ? 26 : 12;
+                        const r = prop.mortgage_interest_rate / 100;
+                        const effRate = Math.pow(1 + r / 2, 2 / periods) - 1;
+                        annualInterest = prop.mortgage_balance * effRate * periods;
+                      }
+                      return (
+                        <div key={prop.id} className="rounded-xl border border-gray-100 overflow-hidden">
+                          <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                            <span className="text-sm font-semibold text-gray-800">{prop.nickname || prop.address}</span>
+                            <span className="text-xs text-gray-400">Acquis {prop.purchase_date} · {buildingPct}% bâtiment</span>
+                          </div>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-0 divide-x divide-gray-100">
+                            <div className="p-4">
+                              <p className="text-xs text-gray-400 mb-1">Coût du bâtiment</p>
+                              <p className="text-base font-bold text-gray-800">{new Intl.NumberFormat('fr-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format(buildingCost)}</p>
+                              <p className="text-xs text-gray-400 mt-0.5">Terrain exclu</p>
+                            </div>
+                            <div className="p-4">
+                              <p className="text-xs text-gray-400 mb-1">FNACC actuelle</p>
+                              <p className="text-base font-bold text-purple-700">{new Intl.NumberFormat('fr-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format(ucc)}</p>
+                              <p className="text-xs text-gray-400 mt-0.5">{yearsHeld} an{yearsHeld !== 1 ? 's' : ''} d'utilisation</p>
+                            </div>
+                            <div className="p-4">
+                              <p className="text-xs text-gray-400 mb-1">DPA max {selectedYear}</p>
+                              <p className="text-base font-bold text-emerald-700">{new Intl.NumberFormat('fr-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format(annualCCA)}</p>
+                              <p className="text-xs text-gray-400 mt-0.5">{yearsHeld === 0 ? 'Règle demi-année' : '4% FNACC'}</p>
+                            </div>
+                            <div className="p-4">
+                              <p className="text-xs text-gray-400 mb-1">Intérêts hypoth. estimés</p>
+                              <p className={`text-base font-bold ${annualInterest > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+                                {annualInterest > 0 ? new Intl.NumberFormat('fr-CA', { style: 'currency', currency: 'CAD', maximumFractionDigits: 0 }).format(annualInterest) : '—'}
+                              </p>
+                              <p className="text-xs text-gray-400 mt-0.5">Déductibles (revenu locatif)</p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-4 p-4 rounded-xl bg-amber-50 border border-amber-100">
+                    <p className="text-xs text-amber-800 leading-relaxed">
+                      <strong>Rappels importants :</strong> La DPA ne peut pas créer ni augmenter une perte locative nette (Règlement 1100(11) LIR).
+                      La récupération d'amortissement lors d'une vente est imposable comme revenu ordinaire.
+                      Les intérêts hypothécaires sont déductibles uniquement si l'immeuble génère un revenu locatif.
+                      Consultez votre CPA pour optimiser la déduction selon votre situation.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {integrationData.length > 0 && (
                 <div className="bg-white rounded-2xl border border-gray-200 p-6">
                   <div className="mb-5">
