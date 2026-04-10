@@ -236,7 +236,7 @@ export default function TaxesPage() {
               </div>
               {taxProfile && (
                 <p className="text-sm text-gray-500 pb-2">
-                  Tax projection for fiscal year {selectedYear}
+                  {t('taxProjectionYear', { year: selectedYear })}
                 </p>
               )}
             </div>
@@ -248,7 +248,7 @@ export default function TaxesPage() {
                 className="flex items-center gap-2"
               >
                 <Calculator size={16} />
-                {calculating ? commonT('loading') : 'Calculate Taxes'}
+                {calculating ? commonT('loading') : t('calculate')}
               </Button>
             ) : (
               <Button
@@ -258,7 +258,7 @@ export default function TaxesPage() {
                 className="flex items-center gap-2"
               >
                 <RefreshCw size={15} className={calculating ? 'animate-spin' : ''} />
-                {calculating ? commonT('loading') : 'Recalculate'}
+                {calculating ? commonT('loading') : t('recalculate')}
               </Button>
             )}
           </div>
@@ -270,10 +270,10 @@ export default function TaxesPage() {
                 <Calculator size={36} className="text-tenir-400" />
               </div>
               <h3 className="text-xl font-semibold text-gray-800 mb-2">
-                No tax data for {selectedYear}
+                {t('noTaxDataTitle', { year: selectedYear })}
               </h3>
               <p className="text-sm text-gray-500 mb-8 max-w-sm">
-                Generate a tax projection based on your transactions and organization settings.
+                {t('noTaxDataDesc')}
               </p>
               <Button
                 variant="primary"
@@ -282,7 +282,7 @@ export default function TaxesPage() {
                 className="flex items-center gap-2"
               >
                 <Calculator size={16} />
-                {calculating ? commonT('loading') : 'Calculate Taxes'}
+                {calculating ? commonT('loading') : t('calculate')}
               </Button>
             </div>
           )}
@@ -322,7 +322,7 @@ export default function TaxesPage() {
               <div className="mb-6 px-5 py-4 rounded-xl bg-white border border-gray-200 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <BarChart3 size={18} className="text-gray-400" />
-                  <span className="text-sm font-medium text-gray-600">Taxable Income</span>
+                  <span className="text-sm font-medium text-gray-600">{t('taxableIncome')}</span>
                 </div>
                 <span className="text-lg font-bold text-gray-900">{formatCurrency(taxableIncome)}</span>
               </div>
@@ -371,14 +371,14 @@ export default function TaxesPage() {
                           </div>
                         ))}
                         <div className="pt-3 border-t border-gray-100 flex justify-between">
-                          <span className="text-sm font-semibold text-gray-700">Total</span>
+                          <span className="text-sm font-semibold text-gray-700">{t('total')}</span>
                           <span className="text-sm font-bold text-gray-900">{formatCurrency(totalTax)}</span>
                         </div>
                       </div>
                     </div>
                   ) : (
                     <div className="py-12 text-center text-gray-400 text-sm">
-                      No breakdown data available.
+                      {t('noBreakdownData')}
                     </div>
                   )}
                 </div>
@@ -388,20 +388,20 @@ export default function TaxesPage() {
                   <AccountBalanceCard
                     label={t('grip')}
                     value={gripBalance}
-                    description="General Rate Income Pool — eligible for enhanced dividend tax credit"
+                    description={t('gripDescription')}
                     color="blue"
                   />
                   <AccountBalanceCard
                     label={t('cda')}
                     value={cdaBalance}
-                    description="Capital Dividend Account — available for tax-free distribution"
+                    description={t('cdaDescription')}
                     color="emerald"
                   />
                   {rdtohEligible > 0 && (
                     <AccountBalanceCard
-                      label="RDTOH Eligible"
+                      label={t('rdtohEligibleLabel')}
                       value={rdtohEligible}
-                      description="Refundable on payment of eligible dividends"
+                      description={t('rdtohEligibleDesc')}
                       color="purple"
                     />
                   )}
@@ -435,7 +435,7 @@ export default function TaxesPage() {
                                   : 'bg-tenir-100 text-tenir-700'
                               }`}
                             >
-                              {isPast ? 'Due' : 'Upcoming'}
+                              {isPast ? t('installmentDue') : t('installmentUpcoming')}
                             </span>
                           </div>
                           <p className="text-lg font-bold text-gray-900 mb-1">
@@ -516,7 +516,7 @@ export default function TaxesPage() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-gray-100">
-                          <th className="text-left font-medium text-gray-500 pb-3 pr-4">Method</th>
+                          <th className="text-left font-medium text-gray-500 pb-3 pr-4">{t('methodHeader')}</th>
                           <th className="text-right font-medium text-gray-500 pb-3 px-4">{t('salary')}</th>
                           <th className="text-right font-medium text-gray-500 pb-3 px-4">{t('eligibleDividend')}</th>
                           <th className="text-right font-medium text-gray-500 pb-3 px-4">{t('nonEligibleDividend')}</th>
@@ -541,7 +541,7 @@ export default function TaxesPage() {
                     </table>
                   </div>
                   <p className="text-xs text-gray-400 mt-4">
-                    Based on combined federal and Quebec rates for {selectedYear}. Consult a CPA for precise planning.
+                    {t('integrationDisclaimer', { year: selectedYear })}
                   </p>
                 </div>
               )}

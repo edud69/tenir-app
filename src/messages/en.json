@@ -31,7 +31,8 @@
     "success": "Success",
     "type": "Type",
     "vendor": "Vendor",
-    "noData": "No data available"
+    "noData": "No data available",
+    "viewAll": "View all"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -61,7 +62,20 @@
     "neq": "Quebec Enterprise Number (NEQ)",
     "bn": "Federal Business Number (BN)",
     "fiscalYearEnd": "Fiscal year end",
-    "or": "or"
+    "or": "or",
+    "emailRequired": "Valid email required",
+    "passwordMinLength": "At least 8 characters",
+    "passwordsDoNotMatch": "Passwords do not match",
+    "companyRequired": "Company name required",
+    "passwordHint": "Minimum 8 characters",
+    "accountSection": "ACCOUNT",
+    "companySection": "COMPANY",
+    "companyPlaceholder": "Your Company Inc.",
+    "optional": "Optional",
+    "signingIn": "Signing in…",
+    "creatingAccount": "Creating account…",
+    "unexpectedError": "An unexpected error occurred. Please try again.",
+    "invalidCredentials": "Invalid email or password"
   },
   "dashboard": {
     "welcome": "Welcome, {name}",
@@ -86,7 +100,12 @@
     "noChartData": "Add transactions to see your chart",
     "overviewSubtitle": "Here's a summary of your financial activity for this fiscal year.",
     "description": "Description",
-    "taxRateEstimate": "Est. tax rate"
+    "taxRateEstimate": "Est. tax rate",
+    "estTaxDue": "Est. tax due",
+    "rate": "Rate:",
+    "margin": "Margin",
+    "revenueVsExpenses": "Revenue vs Expenses",
+    "addFirstTransaction": "Add your first transaction"
   },
   "receipts": {
     "title": "Receipts",
@@ -107,7 +126,18 @@
     "verified": "Verified",
     "rejected": "Rejected",
     "noReceipts": "No receipts yet. Upload your first receipt above.",
-    "uploadCount": "{count} file(s) uploaded"
+    "uploadCount": "{count} file(s) uploaded",
+    "dropToUpload": "Drop to upload",
+    "dragAndDrop": "Drag & drop, or click to browse",
+    "fileTypes": "PDF, JPG, PNG · max 10 MB · AI-extracted automatically",
+    "totalAmount": "Total amount",
+    "linked": "Linked",
+    "allStatuses": "All statuses",
+    "viewDetails": "View details",
+    "linkedTransaction": "Linked transaction",
+    "uploading": "Uploading…",
+    "scanning": "Scanning…",
+    "creatingTransaction": "Creating transaction…"
   },
   "expenses": {
     "title": "Expenses & Revenue",
@@ -141,7 +171,23 @@
     "allCategories": "All categories",
     "startDate": "Start date",
     "endDate": "End date",
-    "frequency": "Frequency"
+    "frequency": "Frequency",
+    "totalExpenses": "Total Expenses",
+    "totalIncome": "Total Income",
+    "netIncome": "Net Income",
+    "taxDeductible": "Tax Deductible",
+    "deductibleCosts": "Deductible costs",
+    "allRevenueSources": "All revenue sources",
+    "incomeMinus": "Income minus expenses",
+    "forTaxFiling": "For tax filing",
+    "filters": "Filters",
+    "clearFilters": "Clear filters",
+    "categoryBreakdown": "Category Breakdown",
+    "vendorPayer": "Vendor / Payer",
+    "editTransaction": "Edit Transaction",
+    "receiptBadge": "Receipt",
+    "noTransactionsYet": "No transactions yet. Add your first transaction to get started.",
+    "loadingTransactions": "Loading transactions..."
   },
   "investments": {
     "title": "Investments",
@@ -219,7 +265,22 @@
     "noProfile": "No tax profile for this year. Enter your income details and click Calculate.",
     "quarter": "Q{n}",
     "method": "Method",
-    "savingsNote": "vs. salary"
+    "savingsNote": "vs. salary",
+    "recalculate": "Recalculate",
+    "taxProjectionYear": "Tax projection for fiscal year {year}",
+    "taxableIncome": "Taxable Income",
+    "noTaxDataTitle": "No tax data for {year}",
+    "noTaxDataDesc": "Generate a tax projection based on your transactions and organization settings.",
+    "total": "Total",
+    "gripDescription": "General Rate Income Pool — eligible for enhanced dividend tax credit",
+    "cdaDescription": "Capital Dividend Account — available for tax-free distribution",
+    "rdtohEligibleLabel": "RDTOH Eligible",
+    "rdtohEligibleDesc": "Refundable on payment of eligible dividends",
+    "installmentDue": "Due",
+    "installmentUpcoming": "Upcoming",
+    "integrationDisclaimer": "Based on combined federal and Quebec rates for {year}. Consult a CPA for precise planning.",
+    "noBreakdownData": "No breakdown data available.",
+    "methodHeader": "Method"
   },
   "forms": {
     "title": "Government Forms",
@@ -303,6 +364,13 @@
     "english": "English",
     "french": "Français",
     "saveChanges": "Save changes",
-    "changeSaved": "Changes saved successfully"
+    "changeSaved": "Changes saved successfully",
+    "enterNeq": "Enter NEQ",
+    "enterBn": "Enter BN",
+    "fiscalYearHint": "Format: MM-DD (e.g., 12-31)",
+    "accountBalances": "Account Balances",
+    "gripHint": "Capital gains reserve eligible for capital dividend",
+    "cdaHint": "Available for tax-free capital dividend distribution",
+    "smallBusinessLimitHint": "Annual federal small business deduction limit"
   }
 }

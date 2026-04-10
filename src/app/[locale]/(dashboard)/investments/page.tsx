@@ -1094,7 +1094,7 @@ export default function InvestmentsPage() {
                             <TableHead>Symbole</TableHead>
                             <TableHead>Nom</TableHead>
                             <TableHead align="right">Actions</TableHead>
-                            <TableHead align="right">CBR/action</TableHead>
+                            <TableHead align="right">PBR/action</TableHead>
                             <TableHead align="right">Cours actuel</TableHead>
                             <TableHead align="right">Var. jour</TableHead>
                             <TableHead align="right">Valeur marchande</TableHead>

@@ -27,28 +27,7 @@ interface TabProps {
   icon: React.ReactNode;
 }
 
-const tabs: TabProps[] = [
-  {
-    id: 'company',
-    label: 'Company Info',
-    icon: <Building2 size={20} />,
-  },
-  {
-    id: 'taxProfile',
-    label: 'Tax Profile',
-    icon: <FileText size={20} />,
-  },
-  {
-    id: 'integrations',
-    label: 'Integrations',
-    icon: <Zap size={20} />,
-  },
-  {
-    id: 'language',
-    label: 'Language',
-    icon: <Globe size={20} />,
-  },
-];
+// Tab labels are set dynamically in the component using translations
 
 interface CompanyFormData {
   companyName: string;
@@ -67,16 +46,11 @@ interface TaxFormData {
 }
 
 const provinceOptions = [
-  { value: 'qc', label: 'Quebec' },
+  { value: 'qc', label: 'Québec' },
   { value: 'on', label: 'Ontario' },
-  { value: 'bc', label: 'British Columbia' },
+  { value: 'bc', label: 'Colombie-Britannique / British Columbia' },
   { value: 'ab', label: 'Alberta' },
-  { value: 'other', label: 'Other' },
-];
-
-const corporationTypes = [
-  { value: 'ccpc', label: 'CCPC (Canadian-Controlled Private Corporation)' },
-  { value: 'general', label: 'General Corporation' },
+  { value: 'other', label: 'Autre / Other' },
 ];
 
 const languageOptions = [
@@ -211,13 +185,13 @@ function CompanyInfoTab({
           label={t('neq')}
           value={formData.neq}
           onChange={(e) => handleChange('neq', e.target.value)}
-          placeholder="Enter NEQ"
+          placeholder={t('enterNeq')}
         />
         <Input
           label={t('bn')}
           value={formData.bn}
           onChange={(e) => handleChange('bn', e.target.value)}
-          placeholder="Enter BN"
+          placeholder={t('enterBn')}
         />
       </div>
 
@@ -228,7 +202,7 @@ function CompanyInfoTab({
           value={formData.fiscalYearEnd}
           onChange={(e) => handleChange('fiscalYearEnd', e.target.value)}
           placeholder="MM-DD"
-          helperText="Format: MM-DD (e.g., 12-31)"
+          helperText={t('fiscalYearHint')}
         />
         <Input
           label={t('incorporationDate')}
@@ -262,6 +236,11 @@ function TaxProfileTab({ onSave }: { onSave: () => void }) {
     cdaBalance: '0',
   });
 
+  const corporationTypes = [
+    { value: 'ccpc',    label: t('ccpc') },
+    { value: 'general', label: t('generalCorporation') },
+  ];
+
   const handleChange = (field: keyof TaxFormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
@@ -281,11 +260,11 @@ function TaxProfileTab({ onSave }: { onSave: () => void }) {
         value={formData.smallBusinessLimit}
         onChange={(e) => handleChange('smallBusinessLimit', e.target.value)}
         placeholder="500000"
-        helperText="Annual federal small business deduction limit"
+        helperText={t('smallBusinessLimitHint')}
       />
 
       <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-        <h3 className="font-semibold text-gray-900 mb-4">Account Balances</h3>
+        <h3 className="font-semibold text-gray-900 mb-4">{t('accountBalances')}</h3>
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -296,7 +275,7 @@ function TaxProfileTab({ onSave }: { onSave: () => void }) {
               value={formData.gripBalance}
               onChange={(e) => handleChange('gripBalance', e.target.value)}
               placeholder="0"
-              helperText="Capital gains reserve eligible for capital dividend"
+              helperText={t('gripHint')}
             />
           </div>
 
@@ -309,7 +288,7 @@ function TaxProfileTab({ onSave }: { onSave: () => void }) {
               value={formData.cdaBalance}
               onChange={(e) => handleChange('cdaBalance', e.target.value)}
               placeholder="0"
-              helperText="Available for tax-free capital dividend distribution"
+              helperText={t('cdaHint')}
             />
           </div>
         </div>
@@ -464,6 +443,13 @@ export default function SettingsPage() {
   const t = useTranslations('settings');
   const { org, orgId, loading: orgLoading } = useOrganization();
   const [activeTab, setActiveTab] = useState('company');
+
+  const tabs: TabProps[] = [
+    { id: 'company',      label: t('tabs.company'),      icon: <Building2 size={20} /> },
+    { id: 'taxProfile',   label: t('tabs.taxProfile'),   icon: <FileText size={20} /> },
+    { id: 'integrations', label: t('tabs.integrations'), icon: <Zap size={20} /> },
+    { id: 'language',     label: t('tabs.language'),     icon: <Globe size={20} /> },
+  ];
   const [savedMessage, setSavedMessage] = useState('');
 
   const handleSave = () => {

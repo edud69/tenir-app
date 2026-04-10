@@ -42,10 +42,10 @@ export default function SignupPage() {
 
   const validate = () => {
     const e: Record<string, string> = {};
-    if (!formData.email || !/\S+@\S+\.\S+/.test(formData.email)) e.email = 'Valid email required';
-    if (!formData.password || formData.password.length < 8) e.password = 'At least 8 characters';
-    if (formData.password !== formData.confirmPassword) e.confirmPassword = 'Passwords do not match';
-    if (!formData.companyName) e.companyName = 'Company name required';
+    if (!formData.email || !/\S+@\S+\.\S+/.test(formData.email)) e.email = t('emailRequired');
+    if (!formData.password || formData.password.length < 8) e.password = t('passwordMinLength');
+    if (formData.password !== formData.confirmPassword) e.confirmPassword = t('passwordsDoNotMatch');
+    if (!formData.companyName) e.companyName = t('companyRequired');
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -72,12 +72,12 @@ export default function SignupPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error || 'Failed to create account'); setIsLoading(false); return; }
+      if (!res.ok) { setError(data.error || t('unexpectedError')); setIsLoading(false); return; }
       const { error: signInError } = await supabase.auth.signInWithPassword({ email: formData.email, password: formData.password });
       if (signInError) { setError(signInError.message); setIsLoading(false); return; }
-      router.push('/fr/dashboard');
+      router.push(`/${locale}/dashboard`);
     } catch {
-      setError('An unexpected error occurred. Please try again.');
+      setError(t('unexpectedError'));
       setIsLoading(false);
     }
   };
@@ -106,7 +106,7 @@ export default function SignupPage() {
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* Account section */}
         <div className="space-y-3.5">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Account</p>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">{t('accountSection')}</p>
 
           <div>
             <Label required>{t('email')}</Label>
@@ -130,7 +130,7 @@ export default function SignupPage() {
               </button>
             </div>
             <FieldError msg={errors.password} />
-            {!errors.password && <p className="mt-1.5 text-xs text-gray-400">Minimum 8 characters</p>}
+            {!errors.password && <p className="mt-1.5 text-xs text-gray-400">{t('passwordHint')}</p>}
           </div>
 
           <div>
@@ -147,11 +147,11 @@ export default function SignupPage() {
 
         {/* Company section */}
         <div className="space-y-3.5">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Company</p>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">{t('companySection')}</p>
 
           <div>
             <Label required>{t('companyName')}</Label>
-            <input name="companyName" type="text" placeholder="Your Company Inc."
+            <input name="companyName" type="text" placeholder={t('companyPlaceholder')}
               value={formData.companyName} onChange={handleChange} disabled={isLoading}
               className={inputCls(!!errors.companyName)} />
             <FieldError msg={errors.companyName} />
@@ -184,7 +184,7 @@ export default function SignupPage() {
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
               </svg>
-              Creating account…
+              {t('creatingAccount')}
             </>
           ) : t('signup')}
         </button>

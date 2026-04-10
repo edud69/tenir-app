@@ -17,18 +17,28 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [showPassword, setShowPassword] = useState(false);
+
+  const validate = () => {
+    const e: { email?: string; password?: string } = {};
+    if (!email || !/\S+@\S+\.\S+/.test(email)) e.email = t('emailRequired');
+    if (!password) e.password = t('passwordMinLength');
+    setFieldErrors(e);
+    return Object.keys(e).length === 0;
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
+    if (!validate()) return;
     setIsLoading(true);
     try {
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-      if (signInError) { setError(signInError.message); setIsLoading(false); return; }
+      if (signInError) { setError(t('invalidCredentials')); setIsLoading(false); return; }
       router.push(`/${locale}/dashboard`);
     } catch {
-      setError('An unexpected error occurred. Please try again.');
+      setError(t('unexpectedError'));
       setIsLoading(false);
     }
   };
@@ -62,11 +72,11 @@ export default function LoginPage() {
             type="email"
             placeholder="you@example.com"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
+            onChange={(e) => { setEmail(e.target.value); if (fieldErrors.email) setFieldErrors((p) => ({ ...p, email: undefined })); }}
             disabled={isLoading}
-            className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-xl bg-gray-50 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-tenir-500/30 focus:border-tenir-400 focus:bg-white transition-all disabled:opacity-50"
+            className={`w-full px-3.5 py-2.5 text-sm border rounded-xl bg-gray-50 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:bg-white transition-all disabled:opacity-50 ${fieldErrors.email ? 'border-red-300 focus:ring-red-400/30 focus:border-red-400' : 'border-gray-200 focus:ring-tenir-500/30 focus:border-tenir-400'}`}
           />
+          {fieldErrors.email && <p className="mt-1.5 text-xs text-red-600 flex items-center gap-1"><span>·</span>{fieldErrors.email}</p>}
         </div>
 
         {/* Password */}
@@ -82,10 +92,9 @@ export default function LoginPage() {
               type={showPassword ? 'text' : 'password'}
               placeholder="••••••••"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
+              onChange={(e) => { setPassword(e.target.value); if (fieldErrors.password) setFieldErrors((p) => ({ ...p, password: undefined })); }}
               disabled={isLoading}
-              className="w-full px-3.5 py-2.5 pr-10 text-sm border border-gray-200 rounded-xl bg-gray-50 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-tenir-500/30 focus:border-tenir-400 focus:bg-white transition-all disabled:opacity-50"
+              className={`w-full px-3.5 py-2.5 pr-10 text-sm border rounded-xl bg-gray-50 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:bg-white transition-all disabled:opacity-50 ${fieldErrors.password ? 'border-red-300 focus:ring-red-400/30 focus:border-red-400' : 'border-gray-200 focus:ring-tenir-500/30 focus:border-tenir-400'}`}
             />
             <button
               type="button"
@@ -100,11 +109,12 @@ export default function LoginPage() {
               )}
             </button>
           </div>
+          {fieldErrors.password && <p className="mt-1.5 text-xs text-red-600 flex items-center gap-1"><span>·</span>{fieldErrors.password}</p>}
         </div>
 
         <button
           type="submit"
-          disabled={isLoading || !email || !password}
+          disabled={isLoading}
           className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-tenir-600 hover:bg-tenir-500 active:bg-tenir-700 text-white text-sm font-semibold rounded-xl transition-all shadow-sm shadow-tenir-200 disabled:opacity-50 disabled:cursor-not-allowed mt-2"
         >
           {isLoading ? (
@@ -113,7 +123,7 @@ export default function LoginPage() {
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
               </svg>
-              Signing in…
+              {t('signingIn')}
             </>
           ) : t('login')}
         </button>

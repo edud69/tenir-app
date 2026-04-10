@@ -14,8 +14,8 @@ const features = [
         <path d="m10 13-2 2 2 2"/><path d="m14 13 2 2-2 2"/>
       </svg>
     ),
-    title: 'AI Receipt Scanning',
-    desc: 'Automatically extract vendor, amount, and category from any receipt.',
+    title: 'Numérisation IA des reçus',
+    desc: 'Extraction automatique du fournisseur, du montant et de la catégorie de chaque reçu.',
   },
   {
     icon: (
@@ -23,8 +23,8 @@ const features = [
         <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
       </svg>
     ),
-    title: 'GRIP & CDA Tracking',
-    desc: 'Real-time capital dividend account and GRIP balance monitoring.',
+    title: 'Suivi du CRTG et CDC',
+    desc: 'Surveillance en temps réel du compte de dividendes en capital et du solde CRTG.',
   },
   {
     icon: (
@@ -32,8 +32,8 @@ const features = [
         <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
       </svg>
     ),
-    title: 'T2 & CO-17 Generation',
-    desc: 'Generate federal and Quebec corporate tax forms in minutes.',
+    title: 'Génération T2 & CO-17',
+    desc: 'Générez les formulaires fiscaux fédéraux et québécois en quelques minutes.',
   },
   {
     icon: (
@@ -41,8 +41,8 @@ const features = [
         <path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>
       </svg>
     ),
-    title: 'Tax Integration Model',
-    desc: 'Compare salary vs dividend strategies with combined federal/Quebec rates.',
+    title: "Modèle d'intégration fiscale",
+    desc: 'Comparez salaire et dividende avec les taux combinés fédéral/Québec.',
   },
 ];
 

@@ -340,30 +340,6 @@ interface Transaction {
   receipt_id?: string | null;
 }
 
-const categoryOptions = [
-  { value: 'office', label: 'Office' },
-  { value: 'professional', label: 'Professional services' },
-  { value: 'insurance', label: 'Insurance' },
-  { value: 'travel', label: 'Travel' },
-  { value: 'meals', label: 'Meals & entertainment' },
-  { value: 'supplies', label: 'Supplies' },
-  { value: 'technology', label: 'Technology' },
-  { value: 'bank', label: 'Bank fees' },
-  { value: 'legal', label: 'Legal fees' },
-  { value: 'accounting', label: 'Accounting fees' },
-  { value: 'dividend', label: 'Dividend' },
-  { value: 'capital_gain', label: 'Capital gain' },
-  { value: 'interest', label: 'Interest' },
-  { value: 'other', label: 'Other' },
-];
-
-const typeOptions = [
-  { value: 'expense', label: 'Expense' },
-  { value: 'income', label: 'Income' },
-  { value: 'dividend', label: 'Dividend' },
-  { value: 'capital_gain', label: 'Capital gain' },
-  { value: 'interest', label: 'Interest' },
-];
 
 interface ModalFormData {
   type: TransactionType;
@@ -389,6 +365,31 @@ function TransactionModal({
 }) {
   const t = useTranslations('expenses');
   const commonT = useTranslations('common');
+
+  const typeOptions = [
+    { value: 'expense', label: t('expense') },
+    { value: 'income', label: t('income') },
+    { value: 'dividend', label: t('dividend') },
+    { value: 'capital_gain', label: t('capitalGain') },
+    { value: 'interest', label: t('interest') },
+  ];
+
+  const categoryOptions = [
+    { value: 'office', label: t('categories.office') },
+    { value: 'professional', label: t('categories.professional') },
+    { value: 'insurance', label: t('categories.insurance') },
+    { value: 'travel', label: t('categories.travel') },
+    { value: 'meals', label: t('categories.meals') },
+    { value: 'supplies', label: t('categories.supplies') },
+    { value: 'technology', label: t('categories.technology') },
+    { value: 'bank', label: t('categories.bank') },
+    { value: 'legal', label: t('categories.legal') },
+    { value: 'accounting', label: t('categories.accounting') },
+    { value: 'dividend', label: t('dividend') },
+    { value: 'capital_gain', label: t('capitalGain') },
+    { value: 'interest', label: t('interest') },
+    { value: 'other', label: t('categories.other') },
+  ];
   const [formData, setFormData] = useState<ModalFormData>(
     initialData
       ? {
@@ -423,7 +424,7 @@ function TransactionModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={initialData ? 'Edit Transaction' : t('addTransaction')}
+      title={initialData ? t('editTransaction') : t('addTransaction')}
       size="lg"
       footer={
         <div className="flex gap-3">
@@ -490,7 +491,7 @@ function TransactionModal({
         </div>
 
         <Input
-          label="Vendor / Payer"
+          label={t('vendorPayer')}
           value={formData.vendor}
           onChange={(e) => setFormData({ ...formData, vendor: e.target.value })}
         />
@@ -510,7 +511,7 @@ function TransactionModal({
 
         {formData.is_recurring && (
           <Select
-            label="Frequency"
+            label={t('frequency')}
             value={formData.recurrence_frequency}
             onChange={(value) => setFormData({ ...formData, recurrence_frequency: value as string })}
             options={[
@@ -673,6 +674,31 @@ export default function ExpensesPage() {
   const commonT = useTranslations('common');
   const supabase = createClient();
   const { orgId, user, loading: orgLoading } = useOrganization();
+
+  const typeOptions = [
+    { value: 'expense', label: t('expense') },
+    { value: 'income', label: t('income') },
+    { value: 'dividend', label: t('dividend') },
+    { value: 'capital_gain', label: t('capitalGain') },
+    { value: 'interest', label: t('interest') },
+  ];
+
+  const categoryOptions = [
+    { value: 'office', label: t('categories.office') },
+    { value: 'professional', label: t('categories.professional') },
+    { value: 'insurance', label: t('categories.insurance') },
+    { value: 'travel', label: t('categories.travel') },
+    { value: 'meals', label: t('categories.meals') },
+    { value: 'supplies', label: t('categories.supplies') },
+    { value: 'technology', label: t('categories.technology') },
+    { value: 'bank', label: t('categories.bank') },
+    { value: 'legal', label: t('categories.legal') },
+    { value: 'accounting', label: t('categories.accounting') },
+    { value: 'dividend', label: t('dividend') },
+    { value: 'capital_gain', label: t('capitalGain') },
+    { value: 'interest', label: t('interest') },
+    { value: 'other', label: t('categories.other') },
+  ];
   const searchParams = useSearchParams();
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -839,34 +865,34 @@ export default function ExpensesPage() {
           {/* Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <SummaryCard
-              title="Total Expenses"
+              title={t('totalExpenses')}
               value={totalExpenses}
               isNegative
-              subtitle="Deductible costs"
+              subtitle={t('deductibleCosts')}
             />
             <SummaryCard
-              title="Total Income"
+              title={t('totalIncome')}
               value={totalIncome}
-              subtitle="All revenue sources"
+              subtitle={t('allRevenueSources')}
             />
             <SummaryCard
-              title="Net Income"
+              title={t('netIncome')}
               value={netIncome}
               isNegative={netIncome < 0}
-              subtitle="Income minus expenses"
+              subtitle={t('incomeMinus')}
             />
             <SummaryCard
-              title="Tax Deductible"
+              title={t('taxDeductible')}
               value={taxDeductible}
               isNegative
-              subtitle="For tax filing"
+              subtitle={t('forTaxFiling')}
             />
           </div>
 
           {/* Filters */}
           <Card padding="md" shadow="sm" className="mb-8">
             <CardHeader>
-              <CardTitle level="h3">Filters</CardTitle>
+              <CardTitle level="h3">{t('filters')}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -874,22 +900,22 @@ export default function ExpensesPage() {
                   label={t('type')}
                   value={typeFilter}
                   onChange={(value) => setTypeFilter(value as string)}
-                  options={[{ value: 'all', label: 'All Types' }, ...typeOptions]}
+                  options={[{ value: 'all', label: t('allTypes') }, ...typeOptions]}
                 />
                 <Select
                   label={commonT('category')}
                   value={categoryFilter}
                   onChange={(value) => setCategoryFilter(value as string)}
-                  options={[{ value: 'all', label: 'All Categories' }, ...categoryOptions]}
+                  options={[{ value: 'all', label: t('allCategories') }, ...categoryOptions]}
                 />
                 <Input
-                  label="Start Date"
+                  label={t('startDate')}
                   type="date"
                   value={dateRange.start}
                   onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
                 />
                 <Input
-                  label="End Date"
+                  label={t('endDate')}
                   type="date"
                   value={dateRange.end}
                   onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
@@ -905,7 +931,7 @@ export default function ExpensesPage() {
                       setDateRange({ start: '', end: '' });
                     }}
                   >
-                    Clear filters
+                    {t('clearFilters')}
                   </Button>
                 </div>
               </div>
@@ -933,17 +959,17 @@ export default function ExpensesPage() {
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <div className="text-center py-12 text-gray-500">Loading transactions...</div>
+                <div className="text-center py-12 text-gray-500">{t('loadingTransactions')}</div>
               ) : (
                 <Table hoverable>
                   <TableHeader>
                     <TableRow isHeader>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead align="right">Amount</TableHead>
-                      <TableHead align="center">Actions</TableHead>
+                      <TableHead>{commonT('date')}</TableHead>
+                      <TableHead>{commonT('description')}</TableHead>
+                      <TableHead>{commonT('category')}</TableHead>
+                      <TableHead>{commonT('type')}</TableHead>
+                      <TableHead align="right">{commonT('amount')}</TableHead>
+                      <TableHead align="center">{commonT('actions')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -958,7 +984,7 @@ export default function ExpensesPage() {
                                 {tx.receipt_id && (
                                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-tenir-50 text-tenir-600 border border-tenir-100">
                                     <Paperclip size={10} />
-                                    Receipt
+                                    {t('receiptBadge')}
                                   </span>
                                 )}
                               </div>
@@ -979,7 +1005,7 @@ export default function ExpensesPage() {
                               }
                               size="sm"
                             >
-                              {tx.type === 'capital_gain' ? 'Capital gain' : tx.type}
+                              {typeOptions.find((o) => o.value === tx.type)?.label ?? tx.type}
                             </Badge>
                           </TableCell>
                           <TableCell align="right">
@@ -1029,7 +1055,7 @@ export default function ExpensesPage() {
                         <TableCell colSpan={6} className="text-center py-8">
                           <p className="text-gray-600">
                             {transactions.length === 0
-                              ? 'No transactions yet. Add your first transaction to get started.'
+                              ? t('noTransactionsYet')
                               : commonT('noResults')}
                           </p>
                         </TableCell>
@@ -1045,7 +1071,7 @@ export default function ExpensesPage() {
           {categoryBreakdown.length > 0 && (
             <Card padding="md" shadow="sm">
               <CardHeader>
-                <CardTitle level="h3">Category Breakdown</CardTitle>
+                <CardTitle level="h3">{t('categoryBreakdown')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">

@@ -174,7 +174,7 @@ function ReceiptCard({ receipt, onDelete, onClick }: {
 
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors flex items-center justify-center pointer-events-none">
           <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 backdrop-blur-sm text-xs font-semibold text-gray-700 px-2.5 py-1 rounded-full shadow-sm">
-            View details
+            {t('viewDetails')}
           </span>
         </div>
         <button
@@ -186,7 +186,7 @@ function ReceiptCard({ receipt, onDelete, onClick }: {
         {receipt.transaction_id && (
           <div className="absolute bottom-2 left-2 z-10">
             <span className="flex items-center gap-1 bg-emerald-500 text-white text-xs font-semibold px-2 py-0.5 rounded-full shadow">
-              <Link2 size={9} /> Linked
+              <Link2 size={9} /> {t('linked')}
             </span>
           </div>
         )}
@@ -422,7 +422,7 @@ function ReceiptDetailModal({ receipt, linkedTx, orphanTxs, onClose, onLink, onU
 
             {/* Transaction section */}
             <div className="pt-1">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Linked transaction</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">{t('linkedTransaction')}</p>
               {linkedTx ? (
                 <div className="flex items-center justify-between p-3.5 bg-emerald-50 border border-emerald-100 rounded-xl">
                   <div className="min-w-0 flex-1">
@@ -497,6 +497,7 @@ function DropzoneArea({ orgId, userId, onReceiptCreated }: {
   orgId: string; userId: string;
   onReceiptCreated: (receipt: ReceiptItem) => Promise<void>;
 }) {
+  const t = useTranslations('receipts');
   const supabase = createClient();
   const [queue, setQueue] = useState<{ id: string; name: string; status: UploadStatus; msg?: string }[]>([]);
 
@@ -586,9 +587,9 @@ function DropzoneArea({ orgId, userId, onReceiptCreated }: {
         <div className={cn('w-12 h-12 rounded-2xl mx-auto mb-4 flex items-center justify-center transition-colors', isDragActive ? 'bg-tenir-100' : 'bg-gray-100')}>
           <Cloud size={22} className={isDragActive ? 'text-tenir-600' : 'text-gray-400'} />
         </div>
-        <p className="font-semibold text-gray-800 mb-1">{isDragActive ? 'Drop to upload' : 'Upload receipts'}</p>
-        <p className="text-sm text-gray-400 mb-1">Drag & drop, or click to browse</p>
-        <p className="text-xs text-gray-300">PDF, JPG, PNG · max 10 MB · AI-extracted automatically</p>
+        <p className="font-semibold text-gray-800 mb-1">{isDragActive ? t('dropToUpload') : t('upload')}</p>
+        <p className="text-sm text-gray-400 mb-1">{t('dragAndDrop')}</p>
+        <p className="text-xs text-gray-300">{t('fileTypes')}</p>
       </div>
 
       {queue.length > 0 && (
@@ -597,10 +598,10 @@ function DropzoneArea({ orgId, userId, onReceiptCreated }: {
             <div key={item.id} className="flex items-center gap-3 px-4 py-2.5 bg-white rounded-xl border border-gray-100 text-sm">
               <FileText size={14} className="text-gray-400 shrink-0" />
               <span className="flex-1 truncate text-gray-700 text-xs">{item.name}</span>
-              {item.status === 'uploading'  && <span className="text-xs text-blue-500 flex items-center gap-1"><Loader2 size={11} className="animate-spin" /> Uploading…</span>}
-              {item.status === 'processing' && <span className="text-xs text-amber-500 flex items-center gap-1"><Loader2 size={11} className="animate-spin" /> Scanning…</span>}
-              {item.status === 'creating'   && <span className="text-xs text-tenir-500 flex items-center gap-1"><Loader2 size={11} className="animate-spin" /> Creating transaction…</span>}
-              {item.status === 'done'       && <span className="text-xs text-emerald-600 flex items-center gap-1.5"><CheckCircle size={13} />{item.msg || 'Done'}</span>}
+              {item.status === 'uploading'  && <span className="text-xs text-blue-500 flex items-center gap-1"><Loader2 size={11} className="animate-spin" /> {t('uploading')}</span>}
+              {item.status === 'processing' && <span className="text-xs text-amber-500 flex items-center gap-1"><Loader2 size={11} className="animate-spin" /> {t('scanning')}</span>}
+              {item.status === 'creating'   && <span className="text-xs text-tenir-500 flex items-center gap-1"><Loader2 size={11} className="animate-spin" /> {t('creatingTransaction')}</span>}
+              {item.status === 'done'       && <span className="text-xs text-emerald-600 flex items-center gap-1.5"><CheckCircle size={13} />{item.msg || '✓'}</span>}
               {item.status === 'error'      && <span className="text-xs text-red-500 flex items-center gap-1"><AlertCircle size={12} />{item.msg}</span>}
             </div>
           ))}
@@ -818,10 +819,10 @@ export default function ReceiptsPage() {
           {/* Stats */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
             {[
-              { label: 'Total amount', value: formatCurrency(totalAmount), color: 'text-gray-900' },
-              { label: t('title'),     value: String(filtered.length),     color: 'text-gray-900' },
-              { label: t('verified'),  value: String(verifiedCount),        color: 'text-emerald-600' },
-              { label: 'Linked',       value: String(linkedCount),          color: 'text-tenir-600' },
+              { label: t('totalAmount'), value: formatCurrency(totalAmount), color: 'text-gray-900' },
+              { label: t('title'),       value: String(filtered.length),     color: 'text-gray-900' },
+              { label: t('verified'),    value: String(verifiedCount),       color: 'text-emerald-600' },
+              { label: t('linked'),      value: String(linkedCount),         color: 'text-tenir-600' },
             ].map((s) => (
               <div key={s.label} className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
                 <p className="text-xs text-gray-400 mb-1">{s.label}</p>
@@ -850,7 +851,7 @@ export default function ReceiptsPage() {
             </div>
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
               className="px-3 py-2 text-sm border border-gray-200 rounded-xl bg-gray-50 text-gray-700 focus:outline-none focus:ring-2 focus:ring-tenir-400/30 focus:border-tenir-400">
-              <option value="all">All statuses</option>
+              <option value="all">{t('allStatuses')}</option>
               <option value="pending">{t('pending')}</option>
               <option value="verified">{t('verified')}</option>
               <option value="rejected">{t('rejected')}</option>

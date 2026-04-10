@@ -31,7 +31,8 @@
     "success": "Succès",
     "type": "Type",
     "vendor": "Fournisseur",
-    "noData": "Aucune donnée disponible"
+    "noData": "Aucune donnée disponible",
+    "viewAll": "Voir tout"
   },
   "nav": {
     "dashboard": "Tableau de bord",
@@ -61,7 +62,20 @@
     "neq": "Numéro d'entreprise du Québec (NEQ)",
     "bn": "Numéro d'entreprise fédéral (NE)",
     "fiscalYearEnd": "Fin d'exercice financier",
-    "or": "ou"
+    "or": "ou",
+    "emailRequired": "Courriel valide requis",
+    "passwordMinLength": "Au moins 8 caractères",
+    "passwordsDoNotMatch": "Les mots de passe ne correspondent pas",
+    "companyRequired": "Nom de la société requis",
+    "passwordHint": "Minimum 8 caractères",
+    "accountSection": "COMPTE",
+    "companySection": "SOCIÉTÉ",
+    "companyPlaceholder": "Votre Société inc.",
+    "optional": "Facultatif",
+    "signingIn": "Connexion en cours...",
+    "creatingAccount": "Création du compte...",
+    "unexpectedError": "Une erreur inattendue s'est produite. Veuillez réessayer.",
+    "invalidCredentials": "Courriel ou mot de passe incorrect"
   },
   "dashboard": {
     "welcome": "Bienvenue, {name}",
@@ -86,7 +100,12 @@
     "noChartData": "Ajoutez des transactions pour afficher le graphique",
     "overviewSubtitle": "Voici un résumé de votre activité financière pour cet exercice.",
     "description": "Description",
-    "taxRateEstimate": "Taux d'imposition estimé"
+    "taxRateEstimate": "Taux d'imposition estimé",
+    "estTaxDue": "Impôt estimé dû",
+    "rate": "Taux :",
+    "margin": "Marge",
+    "revenueVsExpenses": "Revenus c. dépenses",
+    "addFirstTransaction": "Ajouter votre première transaction"
   },
   "receipts": {
     "title": "Reçus",
@@ -107,7 +126,18 @@
     "verified": "Vérifié",
     "rejected": "Rejeté",
     "noReceipts": "Aucun reçu. Téléversez votre premier reçu ci-dessus.",
-    "uploadCount": "{count} fichier(s) téléversé(s)"
+    "uploadCount": "{count} fichier(s) téléversé(s)",
+    "dropToUpload": "Déposer pour téléverser",
+    "dragAndDrop": "Glissez-déposez, ou cliquez pour parcourir",
+    "fileTypes": "PDF, JPG, PNG · max 10 Mo · Extraction IA automatique",
+    "totalAmount": "Montant total",
+    "linked": "Lié",
+    "allStatuses": "Tous les statuts",
+    "viewDetails": "Voir les détails",
+    "linkedTransaction": "Transaction liée",
+    "uploading": "Téléversement...",
+    "scanning": "Analyse...",
+    "creatingTransaction": "Création transaction..."
   },
   "expenses": {
     "title": "Dépenses et revenus",
@@ -141,7 +171,23 @@
     "allCategories": "Toutes les catégories",
     "startDate": "Date de début",
     "endDate": "Date de fin",
-    "frequency": "Fréquence"
+    "frequency": "Fréquence",
+    "totalExpenses": "Dépenses totales",
+    "totalIncome": "Revenus totaux",
+    "netIncome": "Revenu net",
+    "taxDeductible": "Déductible fiscal",
+    "deductibleCosts": "Coûts déductibles",
+    "allRevenueSources": "Toutes sources de revenus",
+    "incomeMinus": "Revenus moins dépenses",
+    "forTaxFiling": "Pour la déclaration fiscale",
+    "filters": "Filtres",
+    "clearFilters": "Réinitialiser les filtres",
+    "categoryBreakdown": "Répartition par catégorie",
+    "vendorPayer": "Fournisseur / Payeur",
+    "editTransaction": "Modifier la transaction",
+    "receiptBadge": "Reçu",
+    "noTransactionsYet": "Aucune transaction. Ajoutez votre première transaction pour commencer.",
+    "loadingTransactions": "Chargement des transactions..."
   },
   "investments": {
     "title": "Placements",
@@ -219,7 +265,22 @@
     "noProfile": "Aucun profil fiscal pour cette année. Saisissez vos revenus et cliquez sur Calculer.",
     "quarter": "T{n}",
     "method": "Méthode",
-    "savingsNote": "c. salaire"
+    "savingsNote": "c. salaire",
+    "recalculate": "Recalculer",
+    "taxProjectionYear": "Projection fiscale pour l'exercice {year}",
+    "taxableIncome": "Revenu imposable",
+    "noTaxDataTitle": "Aucune donnée fiscale pour {year}",
+    "noTaxDataDesc": "Générez une projection fiscale basée sur vos transactions et vos paramètres.",
+    "total": "Total",
+    "gripDescription": "Compte de revenu à taux général — admissible au crédit d'impôt pour dividende déterminé",
+    "cdaDescription": "Compte de dividendes en capital — disponible pour distribution libre d'impôt",
+    "rdtohEligibleLabel": "IMRTD — Déterminés",
+    "rdtohEligibleDesc": "Remboursable sur versement de dividendes déterminés",
+    "installmentDue": "En retard",
+    "installmentUpcoming": "À venir",
+    "integrationDisclaimer": "Basé sur les taux fédéraux et québécois combinés pour {year}. Consultez un CPA pour une planification précise.",
+    "noBreakdownData": "Aucune donnée de répartition disponible.",
+    "methodHeader": "Méthode"
   },
   "forms": {
     "title": "Formulaires gouvernementaux",
@@ -314,6 +375,13 @@
     "english": "English",
     "french": "Français",
     "saveChanges": "Enregistrer les modifications",
-    "changeSaved": "Modifications enregistrées avec succès"
+    "changeSaved": "Modifications enregistrées avec succès",
+    "enterNeq": "Entrez le NEQ",
+    "enterBn": "Entrez le NE",
+    "fiscalYearHint": "Format : MM-JJ (ex. : 12-31)",
+    "accountBalances": "Soldes des comptes",
+    "gripHint": "Réserve de gains en capital admissible au dividende en capital",
+    "cdaHint": "Disponible pour distribution de dividende en capital libre d'impôt",
+    "smallBusinessLimitHint": "Plafond annuel fédéral de la déduction pour petite entreprise"
   }
 }

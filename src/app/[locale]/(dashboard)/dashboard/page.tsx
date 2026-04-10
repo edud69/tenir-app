@@ -94,7 +94,8 @@ export default function DashboardPage() {
   const chartData     = buildChartData(allTx, locale);
   const avgMonthly    = chartData.length > 0 ? totalExpenses / chartData.length : 0;
 
-  const displayName = org?.name || user?.email?.split('@')[0] || '';
+  // Prefer user display name, fall back to email local part, avoid showing raw company name
+  const displayName = user?.email?.split('@')[0] || org?.name || '';
 
   const typeLabel = (type: string) => {
     const map: Record<string, string> = {
@@ -132,7 +133,7 @@ export default function DashboardPage() {
       iconBg: netIncome >= 0 ? 'bg-tenir-50' : 'bg-red-50',
       iconColor: netIncome >= 0 ? 'text-tenir-600' : 'text-red-500',
       accent: netIncome >= 0 ? 'border-l-tenir-400' : 'border-l-red-400',
-      subLabel: 'Margin',
+      subLabel: t('margin'),
       subValue: margin !== null ? `${margin}%` : null,
     },
     {
@@ -142,7 +143,7 @@ export default function DashboardPage() {
       iconBg: 'bg-amber-50',
       iconColor: 'text-amber-500',
       accent: 'border-l-amber-400',
-      subLabel: 'Rate',
+      subLabel: t('rate'),
       subValue: '26.5%',
     },
   ];
@@ -258,7 +259,7 @@ export default function DashboardPage() {
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                       <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} width={42} />
+                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v) => locale === 'fr' ? `${(v / 1000).toFixed(0)} k$` : `$${(v / 1000).toFixed(0)}k`} width={46} />
                       <Tooltip content={<ChartTooltip />} />
                       <Area type="monotone" dataKey="revenue"  stroke="#0c8ee9" strokeWidth={2} fill="url(#gradRevenue)"  dot={false} name={t('totalRevenue')} />
                       <Area type="monotone" dataKey="expenses" stroke="#f87171" strokeWidth={2} fill="url(#gradExpenses)" dot={false} name={t('totalExpenses')} />
@@ -275,7 +276,7 @@ export default function DashboardPage() {
                   { label: t('avgMonthly'), value: formatCurrency(avgMonthly), color: 'text-gray-900' },
                   { label: t('taxRateEstimate'), value: '26.5%', color: 'text-amber-600' },
                   { label: t('ytdMargin'), value: margin !== null ? `${margin}%` : '—', color: netIncome >= 0 ? 'text-emerald-600' : 'text-red-500' },
-                  { label: 'Est. Tax Due', value: formatCurrency(estimatedTax), color: 'text-amber-500' },
+                  { label: t('estTaxDue'), value: formatCurrency(estimatedTax), color: 'text-amber-500' },
                 ].map((s) => (
                   <div key={s.label} className="flex justify-between items-center py-3 border-b border-gray-50 last:border-0">
                     <span className="text-sm text-gray-500">{s.label}</span>
@@ -288,7 +289,7 @@ export default function DashboardPage() {
               {totalRevenue > 0 && (
                 <div className="mt-4 pt-4 border-t border-gray-50">
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs text-gray-400">Revenue vs Expenses</span>
+                    <span className="text-xs text-gray-400">{t('revenueVsExpenses')}</span>
                     <span className={`text-xs font-semibold ${netIncome >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                       {netIncome >= 0 ? '+' : ''}{margin}%
                     </span>
@@ -328,13 +329,13 @@ export default function DashboardPage() {
                 </div>
                 <div className="text-center">
                   <p className="text-sm font-medium text-gray-500">{t('noTransactions')}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">Transactions will appear here once added</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{t('noTransactions')}</p>
                 </div>
                 <button
                   onClick={() => router.push(`/${locale}/expenses`)}
                   className="mt-1 text-xs text-tenir-600 hover:text-tenir-700 font-medium flex items-center gap-1"
                 >
-                  <Plus size={12} /> Add your first transaction
+                  <Plus size={12} /> {t('addFirstTransaction')}
                 </button>
               </div>
             ) : (
