@@ -503,6 +503,19 @@ function DropzoneArea({ orgId, userId, onReceiptCreated }: {
   const setItemStatus = (tempId: string, status: UploadStatus, msg?: string) =>
     setQueue((p) => p.map((q) => q.id === tempId ? { ...q, status, msg } : q));
 
+  const onDropRejected = useCallback((rejections: any[]) => {
+    for (const { file, errors } of rejections) {
+      const tempId = Math.random().toString(36).slice(2);
+      const err = errors[0];
+      const msg = err?.code === 'file-too-large'
+        ? `File too large (max 8 MB)`
+        : err?.code === 'file-invalid-type'
+        ? `Unsupported file type (PDF, JPG, PNG only)`
+        : err?.message || 'File rejected';
+      setQueue((p) => [...p, { id: tempId, name: file.name, status: 'error', msg }]);
+    }
+  }, []);
+
   const onDrop = useCallback(async (files: File[]) => {
     for (const file of files) {
       const tempId = Math.random().toString(36).slice(2);
@@ -577,8 +590,9 @@ function DropzoneArea({ orgId, userId, onReceiptCreated }: {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
+    onDropRejected,
     accept: { 'application/pdf': ['.pdf'], 'image/jpeg': ['.jpg', '.jpeg'], 'image/png': ['.png'] },
-    maxSize: 4 * 1024 * 1024,
+    maxSize: 8 * 1024 * 1024,
   });
 
   return (
@@ -593,7 +607,7 @@ function DropzoneArea({ orgId, userId, onReceiptCreated }: {
         </div>
         <p className="font-semibold text-gray-800 mb-1">{isDragActive ? 'Drop to upload' : 'Upload receipts'}</p>
         <p className="text-sm text-gray-400 mb-1">Drag & drop, or click to browse</p>
-        <p className="text-xs text-gray-300">PDF, JPG, PNG · max 10 MB · AI-extracted automatically</p>
+        <p className="text-xs text-gray-300">PDF, JPG, PNG · max 8 MB · AI-extracted automatically</p>
       </div>
 
       {queue.length > 0 && (
