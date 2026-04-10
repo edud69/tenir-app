@@ -514,7 +514,7 @@ const PROPERTY_TYPE_LABELS: Record<string, string> = {
 };
 
 function PropertyCard({
-  property, units, linkedTx, onAddUnit, onEditUnit, onDeleteUnit, onDeleteProperty, onLinkRent, onUnlinkRent,
+  property, units, linkedTx, onAddUnit, onEditUnit, onDeleteUnit, onDeleteProperty, onEditProperty, onLinkRent, onUnlinkRent,
 }: {
   property: RentalProperty;
   units: RentalUnit[];
@@ -523,6 +523,7 @@ function PropertyCard({
   onEditUnit: (unit: RentalUnit) => void;
   onDeleteUnit: (unitId: string) => void;
   onDeleteProperty: (propertyId: string) => void;
+  onEditProperty: (property: RentalProperty) => void;
   onLinkRent: (property: RentalProperty) => void;
   onUnlinkRent: (txId: string) => void;
 }) {
@@ -563,6 +564,10 @@ function PropertyCard({
             <button onClick={() => onAddUnit(property.id)} title="Ajouter une unité"
               className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors">
               <Plus size={14} />
+            </button>
+            <button onClick={() => onEditProperty(property)} title="Modifier l'immeuble"
+              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors">
+              <Edit2 size={14} />
             </button>
             <button onClick={() => { if (confirm('Supprimer cet immeuble ?')) onDeleteProperty(property.id); }}
               className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors">
@@ -738,6 +743,7 @@ export default function InvestmentsPage() {
   const [units, setUnits] = useState<RentalUnit[]>([]);
   const [rentTx, setRentTx] = useState<RentTransaction[]>([]);
   const [showPropertyModal, setShowPropertyModal] = useState(false);
+  const [editProperty, setEditProperty] = useState<RentalProperty | null>(null);
   const [showUnitModal, setShowUnitModal] = useState<{ propertyId: string; unit?: RentalUnit } | null>(null);
   const [linkRentProperty, setLinkRentProperty] = useState<RentalProperty | null>(null);
 
@@ -905,6 +911,27 @@ export default function InvestmentsPage() {
     });
     if (error) setError(error.message);
     else fetchData();
+  };
+
+  const handleUpdateProperty = async (data: PropertyFormData) => {
+    if (!editProperty) return;
+    const { error } = await (supabase as any)
+      .from('rental_properties')
+      .update({
+        address: data.address, city: data.city, province: data.province,
+        postal_code: data.postal_code || null, nickname: data.nickname || null,
+        property_type: data.property_type,
+        purchase_price: data.purchase_price ? parseFloat(data.purchase_price) : null,
+        purchase_date: data.purchase_date || null, notes: data.notes || null,
+      })
+      .eq('id', editProperty.id);
+    if (error) { setError(error.message); return; }
+    setProperties((prev) => prev.map((p) =>
+      p.id === editProperty.id
+        ? { ...p, ...data, purchase_price: data.purchase_price ? parseFloat(data.purchase_price) : null }
+        : p
+    ));
+    setEditProperty(null);
   };
 
   const handleDeleteProperty = async (id: string) => {
@@ -1230,6 +1257,7 @@ export default function InvestmentsPage() {
                       onEditUnit={(unit) => setShowUnitModal({ propertyId: unit.property_id, unit })}
                       onDeleteUnit={handleDeleteUnit}
                       onDeleteProperty={handleDeleteProperty}
+                      onEditProperty={(p) => setEditProperty(p)}
                       onLinkRent={(p) => setLinkRentProperty(p)}
                       onUnlinkRent={handleUnlinkRent}
                     />
@@ -1254,6 +1282,25 @@ export default function InvestmentsPage() {
       )}
 
       <PropertyModal isOpen={showPropertyModal} onClose={() => setShowPropertyModal(false)} onSubmit={handleAddProperty} />
+
+      {editProperty && (
+        <PropertyModal
+          isOpen={true}
+          onClose={() => setEditProperty(null)}
+          onSubmit={handleUpdateProperty}
+          initialData={{
+            address:        editProperty.address,
+            city:           editProperty.city,
+            province:       editProperty.province,
+            postal_code:    editProperty.postal_code ?? '',
+            nickname:       editProperty.nickname ?? '',
+            property_type:  editProperty.property_type,
+            purchase_price: editProperty.purchase_price != null ? String(editProperty.purchase_price) : '',
+            purchase_date:  editProperty.purchase_date ?? '',
+            notes:          editProperty.notes ?? '',
+          }}
+        />
+      )}
 
       {showUnitModal && (
         <UnitModal
