@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslations } from 'next-intl';
 import { formatCurrency, formatDate, formatPercent, cn } from '@/lib/utils';
 import Header from '@/components/layout/header';
@@ -113,13 +114,17 @@ function SymbolSearch({ value, locked, onSelect, onClear }: {
   onSelect: (s: SymbolSuggestion, price: number, currency: string) => void;
   onClear: () => void;
 }) {
-  const [query, setQuery]       = useState(value);
-  const [results, setResults]   = useState<SymbolSuggestion[]>([]);
-  const [open, setOpen]         = useState(false);
+  const [query, setQuery]         = useState(value);
+  const [results, setResults]     = useState<SymbolSuggestion[]>([]);
+  const [open, setOpen]           = useState(false);
   const [searching, setSearching] = useState(false);
-  const [fetching, setFetching] = useState(false);   // fetching live price after pick
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const wrapRef  = useRef<HTMLDivElement>(null);
+  const [fetching, setFetching]   = useState(false);
+  const [dropPos, setDropPos]     = useState<{ top: number; left: number; width: number } | null>(null);
+  const timerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef  = useRef<HTMLInputElement>(null);
+  const wrapRef   = useRef<HTMLDivElement>(null);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -130,9 +135,17 @@ function SymbolSearch({ value, locked, onSelect, onClear }: {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  // Compute portal position from input rect
+  function updatePos() {
+    if (inputRef.current) {
+      const r = inputRef.current.getBoundingClientRect();
+      setDropPos({ top: r.bottom + 4, left: r.left, width: r.width });
+    }
+  }
+
   // Debounced search
   useEffect(() => {
-    if (locked || query.length < 1) { setResults([]); return; }
+    if (locked || query.length < 1) { setResults([]); setOpen(false); return; }
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(async () => {
       setSearching(true);
@@ -140,6 +153,7 @@ function SymbolSearch({ value, locked, onSelect, onClear }: {
         const res = await fetch(`/api/investments/search?q=${encodeURIComponent(query)}`);
         const data = await res.json();
         setResults(data.results ?? []);
+        updatePos();
         setOpen(true);
       } catch { setResults([]); }
       finally { setSearching(false); }
@@ -175,41 +189,49 @@ function SymbolSearch({ value, locked, onSelect, onClear }: {
     );
   }
 
+  const dropdown = open && results.length > 0 && dropPos && mounted ? createPortal(
+    <div
+      style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, width: dropPos.width, zIndex: 9999 }}
+      className="bg-white rounded-xl border border-gray-200 shadow-2xl overflow-hidden"
+      onMouseDown={(e) => e.preventDefault()} // prevent input blur before click fires
+    >
+      {results.map((s) => (
+        <button key={s.symbol} type="button" onMouseDown={() => handlePick(s)}
+          className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-tenir-50 transition-colors text-left">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-gray-900 text-sm">{s.symbol}</span>
+              <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded font-medium">{s.typeLabel}</span>
+              {s.exchange && <span className="text-xs text-gray-400">{s.exchange}</span>}
+            </div>
+            <p className="text-xs text-gray-500 truncate mt-0.5">{s.shortName}</p>
+          </div>
+        </button>
+      ))}
+      <p className="text-[10px] text-gray-400 px-4 py-2 border-t border-gray-50 bg-gray-50">
+        Sélectionnez un résultat pour verrouiller le symbole et charger le cours en temps réel
+      </p>
+    </div>,
+    document.body
+  ) : null;
+
   return (
     <div ref={wrapRef} className="relative">
       <p className="text-xs font-medium text-gray-600 mb-1.5">Symbole <span className="text-red-400">*</span></p>
       <div className="relative">
         <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
         <input
+          ref={inputRef}
           autoFocus
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          onFocus={() => results.length > 0 && setOpen(true)}
+          onFocus={() => { if (results.length > 0) { updatePos(); setOpen(true); } }}
           placeholder="Rechercher RY.TO, AAPL, Banque Royale…"
           className="w-full pl-8 pr-8 py-2 text-sm border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-tenir-400/30 focus:border-tenir-400 transition-all"
         />
         {searching && <Loader2 size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 animate-spin" />}
       </div>
-      {open && results.length > 0 && (
-        <div className="absolute z-50 mt-1 w-full bg-white rounded-xl border border-gray-200 shadow-xl overflow-hidden">
-          {results.map((s) => (
-            <button key={s.symbol} type="button" onMouseDown={() => handlePick(s)}
-              className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-tenir-50 transition-colors text-left">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-gray-900 text-sm">{s.symbol}</span>
-                  <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded font-medium">{s.typeLabel}</span>
-                  {s.exchange && <span className="text-xs text-gray-400">{s.exchange}</span>}
-                </div>
-                <p className="text-xs text-gray-500 truncate mt-0.5">{s.shortName}</p>
-              </div>
-            </button>
-          ))}
-          <p className="text-[10px] text-gray-400 px-4 py-2 border-t border-gray-50 bg-gray-50">
-            Sélectionnez un résultat pour verrouiller le symbole et charger le cours en temps réel
-          </p>
-        </div>
-      )}
+      {dropdown}
     </div>
   );
 }
