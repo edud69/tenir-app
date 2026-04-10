@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { formatCurrency, formatDate, formatPercent, cn } from '@/lib/utils';
 import Header from '@/components/layout/header';
@@ -11,9 +11,17 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
 import { Table, TableBody, TableHead, TableHeader, TableRow, TableCell } from '@/components/ui/table';
-import { Plus, TrendingUp, DollarSign, ArrowUpRight, ArrowDownLeft, Edit2, Trash2 } from 'lucide-react';
+import {
+  Plus, TrendingUp, DollarSign, ArrowUpRight, ArrowDownLeft, Trash2,
+  Building2, Home, ChevronDown, ChevronRight, Users, MapPin, Link2, Unlink,
+  CheckCircle, AlertCircle,
+} from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useOrganization } from '@/hooks/useOrganization';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type MainTab = 'portfolio' | 'realestate';
 
 interface Investment {
   id: string;
@@ -46,172 +54,441 @@ interface DividendRecord {
   withholding_tax: number | null;
 }
 
-interface InvestmentFormData {
-  symbol: string;
-  name: string;
-  type: string;
-  shares: number;
-  purchase_price: number;
-  purchase_date: string;
-  current_price: number;
-  currency: string;
-  account_type: string;
-  notes: string;
+interface RentalProperty {
+  id: string;
+  organization_id: string;
+  address: string;
+  city: string;
+  province: string;
+  postal_code: string | null;
+  nickname: string | null;
+  property_type: string;
+  purchase_price: number | null;
+  purchase_date: string | null;
+  notes: string | null;
+  created_at: string;
 }
 
-function InvestmentModal({
-  isOpen,
-  onClose,
-  onSubmit,
-  initialData,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
+interface RentalUnit {
+  id: string;
+  property_id: string;
+  unit_number: string;
+  tenant_name: string | null;
+  tenant_email: string | null;
+  lease_start: string | null;
+  lease_end: string | null;
+  monthly_rent: number;
+  is_vacant: boolean;
+  notes: string | null;
+}
+
+interface RentTransaction {
+  id: string;
+  date: string;
+  description: string;
+  amount: number;
+  vendor: string | null;
+  property_id: string | null;
+  category: string;
+}
+
+// ─── Investment Modal ─────────────────────────────────────────────────────────
+
+interface InvestmentFormData {
+  symbol: string; name: string; type: string; shares: number;
+  purchase_price: number; purchase_date: string; current_price: number;
+  currency: string; account_type: string; notes: string;
+}
+
+function InvestmentModal({ isOpen, onClose, onSubmit, initialData }: {
+  isOpen: boolean; onClose: () => void;
   onSubmit: (data: InvestmentFormData) => void;
   initialData?: InvestmentFormData;
 }) {
   const t = useTranslations('investments');
   const commonT = useTranslations('common');
-  const [formData, setFormData] = useState<InvestmentFormData>(
-    initialData || {
-      symbol: '',
-      name: '',
-      type: 'stock',
-      shares: 0,
-      purchase_price: 0,
-      purchase_date: new Date().toISOString().split('T')[0],
-      current_price: 0,
-      currency: 'CAD',
-      account_type: '',
-      notes: '',
-    }
-  );
-
-  useEffect(() => {
-    if (initialData) setFormData(initialData);
-  }, [initialData]);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSubmit(formData);
-    onClose();
-  };
+  const [fd, setFd] = useState<InvestmentFormData>(initialData || {
+    symbol: '', name: '', type: 'stock', shares: 0,
+    purchase_price: 0, purchase_date: new Date().toISOString().split('T')[0],
+    current_price: 0, currency: 'CAD', account_type: '', notes: '',
+  });
+  useEffect(() => { if (initialData) setFd(initialData); }, [initialData]);
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title={initialData ? 'Edit Investment' : t('addInvestment')}
-      size="lg"
-      footer={
-        <div className="flex gap-3">
-          <Button variant="ghost" fullWidth onClick={onClose}>
-            {commonT('cancel')}
-          </Button>
-          <Button variant="primary" fullWidth onClick={handleSubmit}>
-            {commonT('save')}
-          </Button>
-        </div>
-      }
-    >
+    <Modal isOpen={isOpen} onClose={onClose} title={initialData ? 'Edit Investment' : t('addInvestment')} size="lg"
+      footer={<div className="flex gap-3"><Button variant="ghost" fullWidth onClick={onClose}>{commonT('cancel')}</Button><Button variant="primary" fullWidth onClick={() => { onSubmit(fd); onClose(); }}>{commonT('save')}</Button></div>}>
       <form className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
-          <Input
-            label={t('symbol')}
-            value={formData.symbol}
-            onChange={(e) => setFormData({ ...formData, symbol: e.target.value })}
-            placeholder="e.g., RBC"
-            required
-          />
-          <Input
-            label="Name"
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            required
-          />
+          <Input label={t('symbol')} value={fd.symbol} onChange={(e) => setFd({ ...fd, symbol: e.target.value })} placeholder="e.g., RBC" required />
+          <Input label="Name" value={fd.name} onChange={(e) => setFd({ ...fd, name: e.target.value })} required />
         </div>
-
         <div className="grid grid-cols-2 gap-4">
-          <Select
-            label="Type"
-            value={formData.type}
-            onChange={(value) => setFormData({ ...formData, type: value as string })}
-            options={[
-              { value: 'stock', label: 'Stock' },
-              { value: 'etf', label: 'ETF' },
-              { value: 'bond', label: 'Bond' },
-              { value: 'gic', label: 'GIC' },
-              { value: 'mutual_fund', label: 'Mutual Fund' },
-              { value: 'other', label: 'Other' },
-            ]}
-          />
-          <Select
-            label="Currency"
-            value={formData.currency}
-            onChange={(value) => setFormData({ ...formData, currency: value as string })}
-            options={[
-              { value: 'CAD', label: 'CAD' },
-              { value: 'USD', label: 'USD' },
-            ]}
-          />
+          <Select label="Type" value={fd.type} onChange={(v) => setFd({ ...fd, type: v as string })} options={[
+            { value: 'stock', label: 'Stock' }, { value: 'etf', label: 'ETF' },
+            { value: 'bond', label: 'Bond' }, { value: 'gic', label: 'GIC' },
+            { value: 'mutual_fund', label: 'Mutual Fund' }, { value: 'other', label: 'Other' },
+          ]} />
+          <Select label="Currency" value={fd.currency} onChange={(v) => setFd({ ...fd, currency: v as string })}
+            options={[{ value: 'CAD', label: 'CAD' }, { value: 'USD', label: 'USD' }]} />
         </div>
-
         <div className="grid grid-cols-3 gap-4">
-          <Input
-            label={t('shares')}
-            type="number"
-            step="0.01"
-            value={formData.shares}
-            onChange={(e) => setFormData({ ...formData, shares: parseFloat(e.target.value) || 0 })}
-            required
-          />
-          <Input
-            label={t('acb')}
-            type="number"
-            step="0.01"
-            value={formData.purchase_price}
-            onChange={(e) => setFormData({ ...formData, purchase_price: parseFloat(e.target.value) || 0 })}
-            helperText="Per share"
-            required
-          />
-          <Input
-            label={t('currentValue')}
-            type="number"
-            step="0.01"
-            value={formData.current_price}
-            onChange={(e) => setFormData({ ...formData, current_price: parseFloat(e.target.value) || 0 })}
-            helperText="Per share"
-            required
-          />
+          <Input label={t('shares')} type="number" step="0.01" value={fd.shares} onChange={(e) => setFd({ ...fd, shares: parseFloat(e.target.value) || 0 })} required />
+          <Input label={t('acb')} type="number" step="0.01" value={fd.purchase_price} onChange={(e) => setFd({ ...fd, purchase_price: parseFloat(e.target.value) || 0 })} helperText="Per share" required />
+          <Input label={t('currentValue')} type="number" step="0.01" value={fd.current_price} onChange={(e) => setFd({ ...fd, current_price: parseFloat(e.target.value) || 0 })} helperText="Per share" required />
         </div>
-
-        <Input
-          label="Purchase Date"
-          type="date"
-          value={formData.purchase_date}
-          onChange={(e) => setFormData({ ...formData, purchase_date: e.target.value })}
-        />
-
-        <Input
-          label="Notes"
-          value={formData.notes}
-          onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-        />
+        <Input label="Purchase Date" type="date" value={fd.purchase_date} onChange={(e) => setFd({ ...fd, purchase_date: e.target.value })} />
+        <Input label="Notes" value={fd.notes} onChange={(e) => setFd({ ...fd, notes: e.target.value })} />
       </form>
     </Modal>
   );
 }
 
-function PortfolioSummaryCard({
-  title,
-  value,
-  subtitle,
-  icon: Icon,
+// ─── Property Modal ───────────────────────────────────────────────────────────
+
+interface PropertyFormData {
+  address: string; city: string; province: string; postal_code: string;
+  nickname: string; property_type: string; purchase_price: string; purchase_date: string; notes: string;
+}
+
+function PropertyModal({ isOpen, onClose, onSubmit, initialData }: {
+  isOpen: boolean; onClose: () => void;
+  onSubmit: (data: PropertyFormData) => void;
+  initialData?: Partial<PropertyFormData>;
+}) {
+  const [fd, setFd] = useState<PropertyFormData>({
+    address: '', city: '', province: 'QC', postal_code: '',
+    nickname: '', property_type: 'residential', purchase_price: '', purchase_date: '', notes: '',
+    ...initialData,
+  });
+  useEffect(() => { if (initialData) setFd((p) => ({ ...p, ...initialData })); }, [isOpen]);
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={initialData?.address ? 'Modifier l\'immeuble' : 'Ajouter un immeuble'} size="lg"
+      footer={<div className="flex gap-3"><Button variant="ghost" fullWidth onClick={onClose}>Annuler</Button><Button variant="primary" fullWidth onClick={() => { onSubmit(fd); onClose(); }}>Enregistrer</Button></div>}>
+      <div className="space-y-4">
+        <div className="grid grid-cols-3 gap-4">
+          <div className="col-span-2">
+            <Input label="Adresse civique" value={fd.address} onChange={(e) => setFd({ ...fd, address: e.target.value })} placeholder="123 rue Principale" required />
+          </div>
+          <Input label="Surnom (optionnel)" value={fd.nickname} onChange={(e) => setFd({ ...fd, nickname: e.target.value })} placeholder="Duplex Laval" />
+        </div>
+        <div className="grid grid-cols-3 gap-4">
+          <Input label="Ville" value={fd.city} onChange={(e) => setFd({ ...fd, city: e.target.value })} placeholder="Montréal" />
+          <Select label="Province" value={fd.province} onChange={(v) => setFd({ ...fd, province: v as string })}
+            options={['QC','ON','BC','AB','MB','SK','NS','NB','NL','PE'].map((p) => ({ value: p, label: p }))} />
+          <Input label="Code postal" value={fd.postal_code} onChange={(e) => setFd({ ...fd, postal_code: e.target.value })} placeholder="H1A 1A1" />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <Select label="Type de propriété" value={fd.property_type} onChange={(v) => setFd({ ...fd, property_type: v as string })}
+            options={[
+              { value: 'residential', label: 'Résidentiel (unifamilial)' },
+              { value: 'multi_unit', label: 'Multilogement (duplex/triplex…)' },
+              { value: 'condo', label: 'Condo' },
+              { value: 'commercial', label: 'Commercial' },
+            ]} />
+          <Input label="Date d'acquisition" type="date" value={fd.purchase_date} onChange={(e) => setFd({ ...fd, purchase_date: e.target.value })} />
+        </div>
+        <Input label="Prix d'achat" type="number" step="0.01" value={fd.purchase_price} onChange={(e) => setFd({ ...fd, purchase_price: e.target.value })} placeholder="0.00" />
+        <Input label="Notes" value={fd.notes} onChange={(e) => setFd({ ...fd, notes: e.target.value })} />
+      </div>
+    </Modal>
+  );
+}
+
+// ─── Unit Modal ───────────────────────────────────────────────────────────────
+
+interface UnitFormData {
+  unit_number: string; tenant_name: string; tenant_email: string;
+  lease_start: string; lease_end: string; monthly_rent: string; is_vacant: boolean; notes: string;
+}
+
+function UnitModal({ isOpen, onClose, onSubmit, initialData }: {
+  isOpen: boolean; onClose: () => void;
+  onSubmit: (data: UnitFormData) => void;
+  initialData?: Partial<UnitFormData>;
+}) {
+  const [fd, setFd] = useState<UnitFormData>({
+    unit_number: '', tenant_name: '', tenant_email: '',
+    lease_start: '', lease_end: '', monthly_rent: '', is_vacant: false, notes: '',
+    ...initialData,
+  });
+  useEffect(() => { if (initialData) setFd((p) => ({ ...p, ...initialData })); }, [isOpen]);
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title={initialData?.unit_number ? 'Modifier l\'unité' : 'Ajouter une unité'} size="md"
+      footer={<div className="flex gap-3"><Button variant="ghost" fullWidth onClick={onClose}>Annuler</Button><Button variant="primary" fullWidth onClick={() => { onSubmit(fd); onClose(); }}>Enregistrer</Button></div>}>
+      <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
+          <Input label="Numéro d'unité" value={fd.unit_number} onChange={(e) => setFd({ ...fd, unit_number: e.target.value })} placeholder="101, Apt A, RDC…" required />
+          <Input label="Loyer mensuel ($)" type="number" step="0.01" value={fd.monthly_rent} onChange={(e) => setFd({ ...fd, monthly_rent: e.target.value })} placeholder="1200.00" required />
+        </div>
+        <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
+          <input type="checkbox" id="vacant" checked={fd.is_vacant} onChange={(e) => setFd({ ...fd, is_vacant: e.target.checked })} className="w-4 h-4 text-tenir-600 rounded" />
+          <label htmlFor="vacant" className="text-sm font-medium text-gray-700">Unité vacante</label>
+        </div>
+        {!fd.is_vacant && (
+          <>
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="Nom du locataire" value={fd.tenant_name} onChange={(e) => setFd({ ...fd, tenant_name: e.target.value })} />
+              <Input label="Courriel" type="email" value={fd.tenant_email} onChange={(e) => setFd({ ...fd, tenant_email: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="Début du bail" type="date" value={fd.lease_start} onChange={(e) => setFd({ ...fd, lease_start: e.target.value })} />
+              <Input label="Fin du bail" type="date" value={fd.lease_end} onChange={(e) => setFd({ ...fd, lease_end: e.target.value })} />
+            </div>
+          </>
+        )}
+        <Input label="Notes" value={fd.notes} onChange={(e) => setFd({ ...fd, notes: e.target.value })} />
+      </div>
+    </Modal>
+  );
+}
+
+// ─── Link Rent Modal ──────────────────────────────────────────────────────────
+
+function LinkRentModal({ property, unlinkedIncome, onClose, onLink, onUnlink }: {
+  property: RentalProperty;
+  unlinkedIncome: RentTransaction[];
+  linkedToProperty: RentTransaction[];
+  onClose: () => void;
+  onLink: (txId: string) => void;
+  onUnlink: (txId: string) => void;
+}) {
+  const [search, setSearch] = useState('');
+  const filtered = unlinkedIncome.filter((tx) => {
+    const q = search.toLowerCase();
+    return !q || tx.description.toLowerCase().includes(q) || (tx.vendor || '').toLowerCase().includes(q);
+  });
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">Lier des revenus de loyer</h2>
+            <p className="text-xs text-gray-400 mt-0.5">{property.nickname || property.address}</p>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400">✕</button>
+        </div>
+        <div className="px-6 pt-4 pb-2">
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher une transaction…"
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl bg-gray-50 focus:outline-none focus:ring-2 focus:ring-tenir-400/30 focus:border-tenir-400" />
+        </div>
+        <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-1.5 mt-2">
+          {filtered.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-8">Aucune transaction de revenu non liée</p>
+          ) : (
+            filtered.map((tx) => (
+              <button key={tx.id} onClick={() => onLink(tx.id)}
+                className="w-full flex items-center gap-3 p-3 rounded-xl border border-gray-100 hover:border-tenir-200 hover:bg-tenir-50/30 transition-all text-left group">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">{tx.description}</p>
+                  <p className="text-xs text-gray-400">{tx.date}{tx.vendor ? ` · ${tx.vendor}` : ''}</p>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-sm font-bold text-emerald-600">{formatCurrency(tx.amount)}</p>
+                  <span className="text-xs text-tenir-500 font-medium opacity-0 group-hover:opacity-100 transition-opacity">Lier →</span>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Property Card ────────────────────────────────────────────────────────────
+
+const PROPERTY_TYPE_LABELS: Record<string, string> = {
+  residential: 'Résidentiel', multi_unit: 'Multilogement', condo: 'Condo', commercial: 'Commercial',
+};
+
+function PropertyCard({
+  property, units, linkedTx, onAddUnit, onEditUnit, onDeleteUnit, onDeleteProperty, onLinkRent, onUnlinkRent,
 }: {
-  title: string;
-  value: string;
-  subtitle?: string;
-  icon: React.ComponentType<{ size: number }>;
+  property: RentalProperty;
+  units: RentalUnit[];
+  linkedTx: RentTransaction[];
+  onAddUnit: (propertyId: string) => void;
+  onEditUnit: (unit: RentalUnit) => void;
+  onDeleteUnit: (unitId: string) => void;
+  onDeleteProperty: (propertyId: string) => void;
+  onLinkRent: (property: RentalProperty) => void;
+  onUnlinkRent: (txId: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(true);
+  const totalExpected = units.filter((u) => !u.is_vacant).reduce((s, u) => s + u.monthly_rent, 0);
+  const totalReceived = linkedTx.reduce((s, tx) => s + tx.amount, 0);
+  const pct = totalExpected > 0 ? Math.min(100, (totalReceived / totalExpected) * 100) : 0;
+  const activeUnits = units.filter((u) => !u.is_vacant).length;
+  const vacantUnits = units.filter((u) => u.is_vacant).length;
+
+  return (
+    <Card padding="none" shadow="sm" className="bg-white overflow-hidden">
+      {/* Header */}
+      <div className="px-5 py-4 border-b border-gray-50">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-tenir-50 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <Building2 size={18} className="text-tenir-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              {property.nickname && <span className="font-semibold text-gray-900">{property.nickname}</span>}
+              <span className={cn('text-xs font-medium px-2 py-0.5 rounded-full', property.nickname ? 'text-gray-400 bg-gray-50' : 'text-gray-700 font-semibold')}>
+                {property.address}
+              </span>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 font-medium">
+                {PROPERTY_TYPE_LABELS[property.property_type] || property.property_type}
+              </span>
+            </div>
+            <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
+              <MapPin size={10} />{[property.city, property.province, property.postal_code].filter(Boolean).join(', ')}
+            </p>
+          </div>
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button onClick={() => onLinkRent(property)} title="Lier des loyers"
+              className="p-1.5 rounded-lg hover:bg-tenir-50 text-gray-400 hover:text-tenir-600 transition-colors">
+              <Link2 size={14} />
+            </button>
+            <button onClick={() => onAddUnit(property.id)} title="Ajouter une unité"
+              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors">
+              <Plus size={14} />
+            </button>
+            <button onClick={() => { if (confirm('Supprimer cet immeuble ?')) onDeleteProperty(property.id); }}
+              className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors">
+              <Trash2 size={14} />
+            </button>
+            <button onClick={() => setExpanded((v) => !v)}
+              className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors">
+              {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </button>
+          </div>
+        </div>
+
+        {/* Summary row */}
+        <div className="mt-3 grid grid-cols-3 gap-3">
+          <div className="bg-gray-50 rounded-xl px-3 py-2">
+            <p className="text-xs text-gray-400 mb-0.5">Unités</p>
+            <p className="text-sm font-bold text-gray-900">{units.length}</p>
+            <p className="text-xs text-gray-400">{activeUnits} actives · {vacantUnits} vacantes</p>
+          </div>
+          <div className="bg-gray-50 rounded-xl px-3 py-2">
+            <p className="text-xs text-gray-400 mb-0.5">Loyer attendu/mois</p>
+            <p className="text-sm font-bold text-gray-900">{formatCurrency(totalExpected)}</p>
+          </div>
+          <div className="bg-gray-50 rounded-xl px-3 py-2">
+            <p className="text-xs text-gray-400 mb-0.5">Loyer reçu (lié)</p>
+            <p className={cn('text-sm font-bold', totalReceived >= totalExpected && totalExpected > 0 ? 'text-emerald-600' : 'text-gray-900')}>
+              {formatCurrency(totalReceived)}
+            </p>
+          </div>
+        </div>
+
+        {/* Progress bar */}
+        {totalExpected > 0 && (
+          <div className="mt-2">
+            <div className="flex justify-between text-xs text-gray-400 mb-1">
+              <span>Taux de collecte</span>
+              <span>{pct.toFixed(0)}%</span>
+            </div>
+            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div className={cn('h-full rounded-full transition-all', pct >= 100 ? 'bg-emerald-400' : pct >= 75 ? 'bg-amber-400' : 'bg-red-400')}
+                style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {expanded && (
+        <div className="px-5 py-3">
+          {/* Units */}
+          {units.length === 0 ? (
+            <div className="text-center py-6">
+              <Home size={24} className="text-gray-200 mx-auto mb-2" />
+              <p className="text-sm text-gray-400">Aucune unité — ajoutez des logements à cet immeuble.</p>
+              <button onClick={() => onAddUnit(property.id)}
+                className="mt-2 text-xs text-tenir-600 hover:text-tenir-700 font-medium flex items-center gap-1 mx-auto">
+                <Plus size={11} /> Ajouter une unité
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2 mb-3">
+              {units.map((unit) => {
+                const leaseActive = unit.lease_end && new Date(unit.lease_end) > new Date();
+                const leaseExpiring = unit.lease_end && (() => {
+                  const d = (new Date(unit.lease_end).getTime() - Date.now()) / 86400000;
+                  return d >= 0 && d <= 60;
+                })();
+                return (
+                  <div key={unit.id} className={cn('flex items-center gap-3 p-3 rounded-xl border', unit.is_vacant ? 'bg-gray-50 border-gray-100' : 'bg-white border-gray-100')}>
+                    <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0', unit.is_vacant ? 'bg-gray-100' : 'bg-emerald-50')}>
+                      {unit.is_vacant ? <AlertCircle size={14} className="text-gray-400" /> : <CheckCircle size={14} className="text-emerald-500" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-gray-900">Unité {unit.unit_number}</span>
+                        {unit.is_vacant && <span className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">Vacant</span>}
+                        {leaseExpiring && <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-600 font-medium">Bail expire bientôt</span>}
+                      </div>
+                      {!unit.is_vacant && unit.tenant_name && (
+                        <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+                          <Users size={9} /> {unit.tenant_name}
+                          {unit.lease_end && <span className="ml-1 text-gray-400">· Bail jusqu'au {formatDate(unit.lease_end)}</span>}
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-sm font-bold text-gray-900">{formatCurrency(unit.monthly_rent)}<span className="text-xs font-normal text-gray-400">/mois</span></p>
+                    </div>
+                    <div className="flex gap-1 flex-shrink-0">
+                      <button onClick={() => onEditUnit(unit)} className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      </button>
+                      <button onClick={() => { if (confirm('Supprimer cette unité ?')) onDeleteUnit(unit.id); }} className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors">
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Linked transactions */}
+          {linkedTx.length > 0 && (
+            <div className="border-t border-gray-50 pt-3">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Paiements liés</p>
+              <div className="space-y-1">
+                {linkedTx.map((tx) => (
+                  <div key={tx.id} className="flex items-center justify-between text-sm py-1.5 px-2 rounded-lg hover:bg-gray-50 group">
+                    <div className="min-w-0 flex-1">
+                      <span className="text-gray-700 truncate">{tx.description}</span>
+                      <span className="text-gray-400 text-xs ml-2">{tx.date}</span>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="font-semibold text-emerald-600">{formatCurrency(tx.amount)}</span>
+                      <button onClick={() => onUnlinkRent(tx.id)} title="Délier"
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-all">
+                        <Unlink size={11} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ─── Summary card ─────────────────────────────────────────────────────────────
+
+function PortfolioSummaryCard({ title, value, subtitle, icon: Icon }: {
+  title: string; value: string; subtitle?: string;
+  icon: React.ElementType;
 }) {
   return (
     <Card padding="md" shadow="sm">
@@ -221,118 +498,164 @@ function PortfolioSummaryCard({
           <p className="text-2xl font-bold text-gray-900">{value}</p>
           {subtitle && <p className="text-xs text-gray-500 mt-1">{subtitle}</p>}
         </div>
-        <div className="p-3 bg-tenir-100 rounded-lg text-tenir-600">
-          <Icon size={24} />
-        </div>
+        <div className="p-3 bg-tenir-100 rounded-lg text-tenir-600"><Icon size={24} /></div>
       </div>
     </Card>
   );
 }
 
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
 export default function InvestmentsPage() {
   const t = useTranslations('investments');
   const commonT = useTranslations('common');
-  const { orgId, loading: orgLoading } = useOrganization();
+  const { orgId, user, loading: orgLoading } = useOrganization();
   const supabase = createClient();
 
+  const [mainTab, setMainTab] = useState<MainTab>('portfolio');
+
+  // Portfolio state
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [dividends, setDividends] = useState<DividendRecord[]>([]);
+  const [isInvModalOpen, setIsInvModalOpen] = useState(false);
+
+  // Real estate state
+  const [properties, setProperties] = useState<RentalProperty[]>([]);
+  const [units, setUnits] = useState<RentalUnit[]>([]);
+  const [rentTx, setRentTx] = useState<RentTransaction[]>([]);
+  const [showPropertyModal, setShowPropertyModal] = useState(false);
+  const [showUnitModal, setShowUnitModal] = useState<{ propertyId: string; unit?: RentalUnit } | null>(null);
+  const [linkRentProperty, setLinkRentProperty] = useState<RentalProperty | null>(null);
+
   const [dataLoading, setDataLoading] = useState(false);
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const fetchData = useCallback(async () => {
     if (!orgId) return;
-    fetchData();
-  }, [orgId]);
-
-  async function fetchData() {
     setDataLoading(true);
     setError(null);
     try {
-      const [invRes, divRes] = await Promise.all([
-        (supabase as any)
-          .from('investments')
-          .select('*')
-          .eq('organization_id', orgId)
-          .eq('sold', false)
-          .order('created_at', { ascending: false }),
-        (supabase as any)
-          .from('dividend_records')
-          .select('*')
-          .eq('organization_id', orgId)
-          .order('date', { ascending: false }),
+      const [invRes, divRes, propRes, unitRes, txRes] = await Promise.all([
+        (supabase as any).from('investments').select('*').eq('organization_id', orgId).eq('sold', false).order('created_at', { ascending: false }),
+        (supabase as any).from('dividend_records').select('*').eq('organization_id', orgId).order('date', { ascending: false }),
+        (supabase as any).from('rental_properties').select('*').eq('organization_id', orgId).order('created_at', { ascending: false }),
+        (supabase as any).from('rental_units').select('*').order('unit_number'),
+        (supabase as any).from('transactions').select('id,date,description,amount,vendor,property_id,category').eq('organization_id', orgId).eq('type', 'income').order('date', { ascending: false }),
       ]);
-
       if (invRes.error) throw invRes.error;
-      if (divRes.error) throw divRes.error;
-
+      if (propRes.error) throw propRes.error;
       setInvestments(invRes.data || []);
       setDividends(divRes.data || []);
+      setProperties(propRes.data || []);
+      setUnits(unitRes.data || []);
+      setRentTx(txRes.data || []);
     } catch (e: any) {
-      setError(e.message || 'Failed to load investments');
+      setError(e.message || 'Erreur de chargement');
     } finally {
       setDataLoading(false);
     }
-  }
+  }, [orgId]);
 
-  // Calculate portfolio metrics from real data
-  const portfolioBookValue = investments.reduce(
-    (sum, inv) => sum + inv.shares * inv.purchase_price,
-    0
-  );
-  const portfolioMarketValue = investments.reduce(
-    (sum, inv) => sum + inv.shares * (inv.current_price ?? inv.purchase_price),
-    0
-  );
-  const unrealizedGain = portfolioMarketValue - portfolioBookValue;
-  const unrealizedGainPercent =
-    portfolioBookValue > 0 ? (unrealizedGain / portfolioBookValue) * 100 : 0;
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  const ytdDividendIncome = dividends.reduce((sum, div) => sum + div.amount, 0);
+  // ── Portfolio metrics ──────────────────────────────────────────────────────
+
+  const portfolioBook   = investments.reduce((s, i) => s + i.shares * i.purchase_price, 0);
+  const portfolioMarket = investments.reduce((s, i) => s + i.shares * (i.current_price ?? i.purchase_price), 0);
+  const unrealizedGain  = portfolioMarket - portfolioBook;
+  const ytdDividends    = dividends.reduce((s, d) => s + d.amount, 0);
+
+  // ── Real estate metrics ────────────────────────────────────────────────────
+
+  const allUnitsFlat     = units;
+  const totalExpectedMonth = allUnitsFlat.filter((u) => !u.is_vacant).reduce((s, u) => s + u.monthly_rent, 0);
+  const totalReceivedYTD   = rentTx.filter((tx) => tx.property_id).reduce((s, tx) => s + tx.amount, 0);
+  const vacantCount        = allUnitsFlat.filter((u) => u.is_vacant).length;
+
+  // ── Handlers — Investments ─────────────────────────────────────────────────
 
   const handleAddInvestment = async (data: InvestmentFormData) => {
     if (!orgId) return;
-    try {
-      const { error } = await (supabase as any).from('investments').insert({
-        organization_id: orgId,
-        symbol: data.symbol,
-        name: data.name,
-        type: data.type,
-        shares: data.shares,
-        purchase_price: data.purchase_price,
-        purchase_date: data.purchase_date,
-        adjusted_cost_base: data.purchase_price,
-        current_price: data.current_price || null,
-        currency: data.currency,
-        account_type: data.account_type || null,
-        notes: data.notes || null,
-        sold: false,
-      });
-      if (error) throw error;
-      await fetchData();
-    } catch (e: any) {
-      setError(e.message || 'Failed to add investment');
-    }
+    const { error } = await (supabase as any).from('investments').insert({
+      organization_id: orgId, symbol: data.symbol, name: data.name, type: data.type,
+      shares: data.shares, purchase_price: data.purchase_price, purchase_date: data.purchase_date,
+      adjusted_cost_base: data.purchase_price, current_price: data.current_price || null,
+      currency: data.currency, account_type: data.account_type || null, notes: data.notes || null, sold: false,
+    });
+    if (error) setError(error.message);
+    else fetchData();
   };
 
   const handleDeleteInvestment = async (id: string) => {
-    if (!confirm('Delete this investment?')) return;
-    try {
-      const { error } = await (supabase as any)
-        .from('investments')
-        .delete()
-        .eq('id', id);
-      if (error) throw error;
-      setInvestments((prev) => prev.filter((inv) => inv.id !== id));
-    } catch (e: any) {
-      setError(e.message || 'Failed to delete investment');
+    if (!confirm('Supprimer ce placement ?')) return;
+    await (supabase as any).from('investments').delete().eq('id', id);
+    setInvestments((p) => p.filter((i) => i.id !== id));
+  };
+
+  // ── Handlers — Properties ─────────────────────────────────────────────────
+
+  const handleAddProperty = async (data: PropertyFormData) => {
+    if (!orgId) return;
+    const { error } = await (supabase as any).from('rental_properties').insert({
+      organization_id: orgId,
+      address: data.address, city: data.city, province: data.province,
+      postal_code: data.postal_code || null, nickname: data.nickname || null,
+      property_type: data.property_type,
+      purchase_price: data.purchase_price ? parseFloat(data.purchase_price) : null,
+      purchase_date: data.purchase_date || null, notes: data.notes || null,
+    });
+    if (error) setError(error.message);
+    else fetchData();
+  };
+
+  const handleDeleteProperty = async (id: string) => {
+    await (supabase as any).from('rental_properties').delete().eq('id', id);
+    setProperties((p) => p.filter((pr) => pr.id !== id));
+    setUnits((u) => u.filter((un) => un.property_id !== id));
+  };
+
+  // ── Handlers — Units ──────────────────────────────────────────────────────
+
+  const handleSaveUnit = async (data: UnitFormData, propertyId: string, existingId?: string) => {
+    const payload = {
+      property_id: propertyId,
+      unit_number: data.unit_number,
+      tenant_name: data.tenant_name || null,
+      tenant_email: data.tenant_email || null,
+      lease_start: data.lease_start || null,
+      lease_end: data.lease_end || null,
+      monthly_rent: parseFloat(data.monthly_rent) || 0,
+      is_vacant: data.is_vacant,
+      notes: data.notes || null,
+    };
+    if (existingId) {
+      await (supabase as any).from('rental_units').update(payload).eq('id', existingId);
+    } else {
+      await (supabase as any).from('rental_units').insert(payload);
     }
+    fetchData();
+  };
+
+  const handleDeleteUnit = async (id: string) => {
+    await (supabase as any).from('rental_units').delete().eq('id', id);
+    setUnits((u) => u.filter((un) => un.id !== id));
+  };
+
+  // ── Handlers — Rent linking ───────────────────────────────────────────────
+
+  const handleLinkRent = async (txId: string, propertyId: string) => {
+    await (supabase as any).from('transactions').update({ property_id: propertyId }).eq('id', txId);
+    setRentTx((prev) => prev.map((tx) => tx.id === txId ? { ...tx, property_id: propertyId } : tx));
+  };
+
+  const handleUnlinkRent = async (txId: string) => {
+    await (supabase as any).from('transactions').update({ property_id: null }).eq('id', txId);
+    setRentTx((prev) => prev.map((tx) => tx.id === txId ? { ...tx, property_id: null } : tx));
   };
 
   const isLoading = orgLoading || dataLoading;
 
-  if (isLoading) {
+  if (isLoading && investments.length === 0 && properties.length === 0) {
     return (
       <div className="flex flex-col h-full overflow-hidden">
         <Header title={t('title')} />
@@ -347,256 +670,205 @@ export default function InvestmentsPage() {
     <div className="flex flex-col h-full overflow-hidden">
       <Header title={t('title')} />
 
-      <div className="flex-1 overflow-y-auto">
-        <div className="p-6 lg:p-8">
+      <div className="flex-1 overflow-y-auto bg-gray-50/40">
+        <div className="p-6 lg:p-8 max-w-7xl mx-auto">
+
           {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-              {error}
-            </div>
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">{error}</div>
           )}
 
-          {/* Portfolio Summary */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <PortfolioSummaryCard
-              title={t('bookValue')}
-              value={formatCurrency(portfolioBookValue)}
-              subtitle="Adjusted cost base"
-              icon={DollarSign}
-            />
-            <PortfolioSummaryCard
-              title={t('marketValue')}
-              value={formatCurrency(portfolioMarketValue)}
-              subtitle="Current market value"
-              icon={TrendingUp}
-            />
-            <PortfolioSummaryCard
-              title={t('unrealizedGain')}
-              value={formatCurrency(unrealizedGain)}
-              subtitle={formatPercent(unrealizedGainPercent / 100)}
-              icon={unrealizedGain >= 0 ? ArrowUpRight : ArrowDownLeft}
-            />
-            <PortfolioSummaryCard
-              title={t('dividendIncome')}
-              value={formatCurrency(ytdDividendIncome)}
-              subtitle="YTD received"
-              icon={DollarSign}
-            />
+          {/* Main tabs */}
+          <div className="flex gap-1 mb-6 bg-white rounded-xl border border-gray-200 p-1 w-fit shadow-sm">
+            <button onClick={() => setMainTab('portfolio')}
+              className={cn('flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all',
+                mainTab === 'portfolio' ? 'bg-tenir-500 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50')}>
+              <TrendingUp size={15} /> Portefeuille
+            </button>
+            <button onClick={() => setMainTab('realestate')}
+              className={cn('flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all',
+                mainTab === 'realestate' ? 'bg-tenir-500 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-50')}>
+              <Building2 size={15} /> Immeubles
+              {properties.length > 0 && (
+                <span className={cn('text-xs px-1.5 py-0.5 rounded-full font-semibold', mainTab === 'realestate' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600')}>
+                  {properties.length}
+                </span>
+              )}
+            </button>
           </div>
 
-          {/* Add Investment Button */}
-          <div className="mb-8">
-            <Button
-              variant="primary"
-              icon={<Plus size={18} />}
-              onClick={() => setIsModalOpen(true)}
-            >
-              {t('addInvestment')}
-            </Button>
-          </div>
+          {/* ── Portfolio tab ── */}
+          {mainTab === 'portfolio' && (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <PortfolioSummaryCard title={t('bookValue')} value={formatCurrency(portfolioBook)} subtitle="Coût de base rajusté" icon={DollarSign} />
+                <PortfolioSummaryCard title={t('marketValue')} value={formatCurrency(portfolioMarket)} subtitle="Valeur marchande actuelle" icon={TrendingUp} />
+                <PortfolioSummaryCard title={t('unrealizedGain')} value={formatCurrency(unrealizedGain)} subtitle={formatPercent(portfolioBook > 0 ? unrealizedGain / portfolioBook : 0)} icon={unrealizedGain >= 0 ? ArrowUpRight : ArrowDownLeft} />
+                <PortfolioSummaryCard title={t('dividendIncome')} value={formatCurrency(ytdDividends)} subtitle="Cumulatif reçu" icon={DollarSign} />
+              </div>
 
-          {/* Holdings Table */}
-          <Card padding="none" shadow="sm" className="mb-8">
-            <CardHeader className="px-6 pt-6">
-              <CardTitle level="h3">Holdings ({investments.length})</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {investments.length === 0 ? (
-                <div className="text-center py-12">
-                  <p className="text-gray-500 mb-4">{commonT('noResults')}</p>
-                  <Button
-                    variant="outline"
-                    icon={<Plus size={16} />}
-                    onClick={() => setIsModalOpen(true)}
-                  >
-                    {t('addInvestment')}
-                  </Button>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <Table hoverable>
-                    <TableHeader>
-                      <TableRow isHeader>
-                        <TableHead>Symbol</TableHead>
-                        <TableHead>Name</TableHead>
-                        <TableHead align="right">Shares</TableHead>
-                        <TableHead align="right">ACB</TableHead>
-                        <TableHead align="right">Price</TableHead>
-                        <TableHead align="right">Market Value</TableHead>
-                        <TableHead align="right">Gain/Loss</TableHead>
-                        <TableHead align="center">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {investments.map((inv) => {
-                        const bookValue = inv.shares * inv.purchase_price;
-                        const marketValue = inv.shares * (inv.current_price ?? inv.purchase_price);
-                        const gainLoss = marketValue - bookValue;
-                        const gainLossPercent =
-                          bookValue > 0 ? (gainLoss / bookValue) * 100 : 0;
+              <div className="mb-6">
+                <Button variant="primary" icon={<Plus size={18} />} onClick={() => setIsInvModalOpen(true)}>{t('addInvestment')}</Button>
+              </div>
 
-                        return (
-                          <TableRow key={inv.id}>
-                            <TableCell className="font-semibold text-tenir-600">
-                              {inv.symbol}
-                            </TableCell>
-                            <TableCell>
-                              <div>
-                                <p className="font-medium text-gray-900">{inv.name}</p>
-                                {inv.type && (
-                                  <p className="text-xs text-gray-600 capitalize">{inv.type.replace('_', ' ')}</p>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell align="right" className="font-medium">
-                              {inv.shares.toLocaleString('en-CA', { maximumFractionDigits: 2 })}
-                            </TableCell>
-                            <TableCell align="right">
-                              {formatCurrency(inv.purchase_price)}
-                            </TableCell>
-                            <TableCell align="right" className="font-semibold">
-                              {formatCurrency(inv.current_price ?? inv.purchase_price)}
-                            </TableCell>
-                            <TableCell align="right" className="font-semibold">
-                              {formatCurrency(marketValue)}
-                            </TableCell>
-                            <TableCell align="right">
-                              <div className="flex flex-col items-end">
-                                <span
-                                  className={cn(
-                                    'font-semibold',
-                                    gainLoss >= 0 ? 'text-green-600' : 'text-red-600'
-                                  )}
-                                >
-                                  {formatCurrency(gainLoss)}
-                                </span>
-                                <span
-                                  className={cn(
-                                    'text-xs',
-                                    gainLoss >= 0 ? 'text-green-600' : 'text-red-600'
-                                  )}
-                                >
-                                  ({gainLoss >= 0 ? '+' : ''}{gainLossPercent.toFixed(1)}%)
-                                </span>
-                              </div>
-                            </TableCell>
-                            <TableCell align="center">
-                              <div className="flex items-center justify-center gap-2">
-                                <button
-                                  className="p-1 hover:bg-red-50 rounded transition-colors"
-                                  onClick={() => handleDeleteInvestment(inv.id)}
-                                >
-                                  <Trash2 size={16} className="text-red-600" />
-                                </button>
-                              </div>
-                            </TableCell>
+              <Card padding="none" shadow="sm" className="mb-8">
+                <CardHeader className="px-6 pt-6"><CardTitle level="h3">Titres ({investments.length})</CardTitle></CardHeader>
+                <CardContent>
+                  {investments.length === 0 ? (
+                    <div className="text-center py-12">
+                      <p className="text-gray-500 mb-4">{commonT('noResults')}</p>
+                      <Button variant="outline" icon={<Plus size={16} />} onClick={() => setIsInvModalOpen(true)}>{t('addInvestment')}</Button>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <Table hoverable>
+                        <TableHeader>
+                          <TableRow isHeader>
+                            <TableHead>Symbole</TableHead><TableHead>Nom</TableHead>
+                            <TableHead align="right">Actions</TableHead><TableHead align="right">CBR</TableHead>
+                            <TableHead align="right">Prix actuel</TableHead><TableHead align="right">Valeur marchande</TableHead>
+                            <TableHead align="right">G/P</TableHead><TableHead align="center">⋯</TableHead>
                           </TableRow>
-                        );
-                      })}
+                        </TableHeader>
+                        <TableBody>
+                          {investments.map((inv) => {
+                            const book = inv.shares * inv.purchase_price;
+                            const market = inv.shares * (inv.current_price ?? inv.purchase_price);
+                            const gl = market - book;
+                            return (
+                              <TableRow key={inv.id}>
+                                <TableCell className="font-semibold text-tenir-600">{inv.symbol}</TableCell>
+                                <TableCell><p className="font-medium text-gray-900">{inv.name}</p><p className="text-xs text-gray-500 capitalize">{inv.type.replace('_', ' ')}</p></TableCell>
+                                <TableCell align="right" className="font-medium">{inv.shares.toLocaleString('fr-CA', { maximumFractionDigits: 2 })}</TableCell>
+                                <TableCell align="right">{formatCurrency(inv.purchase_price)}</TableCell>
+                                <TableCell align="right" className="font-semibold">{formatCurrency(inv.current_price ?? inv.purchase_price)}</TableCell>
+                                <TableCell align="right" className="font-semibold">{formatCurrency(market)}</TableCell>
+                                <TableCell align="right">
+                                  <span className={cn('font-semibold', gl >= 0 ? 'text-emerald-600' : 'text-red-600')}>{formatCurrency(gl)}</span>
+                                  <p className={cn('text-xs', gl >= 0 ? 'text-emerald-500' : 'text-red-500')}>({gl >= 0 ? '+' : ''}{book > 0 ? ((gl / book) * 100).toFixed(1) : 0}%)</p>
+                                </TableCell>
+                                <TableCell align="center">
+                                  <button onClick={() => handleDeleteInvestment(inv.id)} className="p-1.5 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-500 transition-colors"><Trash2 size={14} /></button>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Dividends */}
+              <Card padding="none" shadow="sm">
+                <CardHeader className="px-6 pt-6"><CardTitle level="h3">Dividendes reçus</CardTitle></CardHeader>
+                <CardContent>
+                  <Table hoverable>
+                    <TableHeader><TableRow isHeader><TableHead>Date</TableHead><TableHead>Payeur</TableHead><TableHead>Type</TableHead><TableHead align="right">Montant</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {dividends.length > 0 ? dividends.map((div) => (
+                        <TableRow key={div.id}>
+                          <TableCell>{formatDate(div.date)}</TableCell>
+                          <TableCell>{div.payer || '—'}</TableCell>
+                          <TableCell>
+                            <Badge variant={div.dividend_type === 'eligible' ? 'success' : div.dividend_type === 'non_eligible' ? 'warning' : 'info'} size="sm">
+                              {div.dividend_type === 'eligible' ? 'Déterminé' : div.dividend_type === 'non_eligible' ? 'Non déterminé' : div.dividend_type === 'capital' ? 'Capital' : 'Étranger'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell align="right" className="font-semibold">{formatCurrency(div.amount)}</TableCell>
+                        </TableRow>
+                      )) : (
+                        <TableRow><TableCell colSpan={4} className="text-center py-8 text-gray-400">{commonT('noResults')}</TableCell></TableRow>
+                      )}
                     </TableBody>
                   </Table>
+                </CardContent>
+              </Card>
+            </>
+          )}
+
+          {/* ── Real Estate tab ── */}
+          {mainTab === 'realestate' && (
+            <>
+              {/* RE summary cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <PortfolioSummaryCard title="Immeubles" value={String(properties.length)} subtitle={`${allUnitsFlat.length} unités au total`} icon={Building2} />
+                <PortfolioSummaryCard title="Loyer mensuel attendu" value={formatCurrency(totalExpectedMonth)} subtitle="Unités occupées" icon={DollarSign} />
+                <PortfolioSummaryCard title="Loyers reçus (liés)" value={formatCurrency(totalReceivedYTD)} subtitle="Transactions liées" icon={ArrowUpRight} />
+                <PortfolioSummaryCard title="Unités vacantes" value={String(vacantCount)} subtitle={vacantCount > 0 ? 'À louer' : 'Toutes occupées'} icon={Home} />
+              </div>
+
+              <div className="mb-6">
+                <Button variant="primary" icon={<Plus size={18} />} onClick={() => setShowPropertyModal(true)}>Ajouter un immeuble</Button>
+              </div>
+
+              {properties.length === 0 ? (
+                <Card padding="md" shadow="sm" className="bg-white">
+                  <CardContent>
+                    <div className="text-center py-14">
+                      <Building2 size={40} className="mx-auto text-gray-200 mb-3" />
+                      <p className="text-gray-500 font-medium">Aucun immeuble enregistré</p>
+                      <p className="text-gray-400 text-sm mt-1 max-w-xs mx-auto">Ajoutez vos immeubles locatifs pour suivre les loyers attendus et reçus.</p>
+                      <Button className="mt-4" icon={<Plus size={16} />} onClick={() => setShowPropertyModal(true)}>Ajouter un immeuble</Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="space-y-4">
+                  {properties.map((prop) => (
+                    <PropertyCard
+                      key={prop.id}
+                      property={prop}
+                      units={units.filter((u) => u.property_id === prop.id)}
+                      linkedTx={rentTx.filter((tx) => tx.property_id === prop.id)}
+                      onAddUnit={(pid) => setShowUnitModal({ propertyId: pid })}
+                      onEditUnit={(unit) => setShowUnitModal({ propertyId: unit.property_id, unit })}
+                      onDeleteUnit={handleDeleteUnit}
+                      onDeleteProperty={handleDeleteProperty}
+                      onLinkRent={(p) => setLinkRentProperty(p)}
+                      onUnlinkRent={handleUnlinkRent}
+                    />
+                  ))}
                 </div>
               )}
-            </CardContent>
-          </Card>
-
-          {/* Dividend Records */}
-          <Card padding="none" shadow="sm">
-            <CardHeader className="px-6 pt-6">
-              <CardTitle level="h3">Dividend Records</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table hoverable>
-                <TableHeader>
-                  <TableRow isHeader>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Payer</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead align="right">Amount</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {dividends.length > 0 ? (
-                    dividends.map((div) => (
-                      <TableRow key={div.id}>
-                        <TableCell>{formatDate(div.date)}</TableCell>
-                        <TableCell>{div.payer || '—'}</TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              div.dividend_type === 'eligible'
-                                ? 'success'
-                                : div.dividend_type === 'non_eligible'
-                                  ? 'warning'
-                                  : 'info'
-                            }
-                            size="sm"
-                          >
-                            {div.dividend_type === 'eligible'
-                              ? 'Eligible'
-                              : div.dividend_type === 'non_eligible'
-                                ? 'Non-eligible'
-                                : div.dividend_type === 'capital'
-                                  ? 'Capital'
-                                  : 'Foreign'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell align="right" className="font-semibold">
-                          {formatCurrency(div.amount)}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center py-8">
-                        <p className="text-gray-600">{commonT('noResults')}</p>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-
-              {dividends.length > 0 && (
-                <div className="mt-6 pt-6 border-t border-gray-200">
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-600 mb-1">Total Dividends</p>
-                      <p className="text-xl font-bold text-gray-900">
-                        {formatCurrency(ytdDividendIncome)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600 mb-1">Eligible Dividends</p>
-                      <p className="text-xl font-bold text-gray-900">
-                        {formatCurrency(
-                          dividends
-                            .filter((d) => d.dividend_type === 'eligible')
-                            .reduce((sum, d) => sum + d.amount, 0)
-                        )}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600 mb-1">Non-Eligible Dividends</p>
-                      <p className="text-xl font-bold text-gray-900">
-                        {formatCurrency(
-                          dividends
-                            .filter((d) => d.dividend_type === 'non_eligible')
-                            .reduce((sum, d) => sum + d.amount, 0)
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+            </>
+          )}
         </div>
       </div>
 
-      <InvestmentModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSubmit={handleAddInvestment}
-      />
+      {/* Modals */}
+      <InvestmentModal isOpen={isInvModalOpen} onClose={() => setIsInvModalOpen(false)} onSubmit={handleAddInvestment} />
+
+      <PropertyModal isOpen={showPropertyModal} onClose={() => setShowPropertyModal(false)} onSubmit={handleAddProperty} />
+
+      {showUnitModal && (
+        <UnitModal
+          isOpen={true}
+          onClose={() => setShowUnitModal(null)}
+          initialData={showUnitModal.unit ? {
+            unit_number: showUnitModal.unit.unit_number,
+            tenant_name: showUnitModal.unit.tenant_name || '',
+            tenant_email: showUnitModal.unit.tenant_email || '',
+            lease_start: showUnitModal.unit.lease_start || '',
+            lease_end: showUnitModal.unit.lease_end || '',
+            monthly_rent: String(showUnitModal.unit.monthly_rent),
+            is_vacant: showUnitModal.unit.is_vacant,
+            notes: showUnitModal.unit.notes || '',
+          } : undefined}
+          onSubmit={(data) => handleSaveUnit(data, showUnitModal.propertyId, showUnitModal.unit?.id)}
+        />
+      )}
+
+      {linkRentProperty && (
+        <LinkRentModal
+          property={linkRentProperty}
+          unlinkedIncome={rentTx.filter((tx) => !tx.property_id)}
+          linkedToProperty={rentTx.filter((tx) => tx.property_id === linkRentProperty.id)}
+          onClose={() => setLinkRentProperty(null)}
+          onLink={(txId) => { handleLinkRent(txId, linkRentProperty.id); }}
+          onUnlink={handleUnlinkRent}
+        />
+      )}
     </div>
   );
 }
