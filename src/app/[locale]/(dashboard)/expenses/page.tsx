@@ -46,6 +46,8 @@ interface ReceiptRecord {
   amount: number | null;
   date: string | null;
   category: string | null;
+  gst_amount: number | null;
+  qst_amount: number | null;
   transaction_id: string | null;
 }
 
@@ -538,6 +540,19 @@ function TransactionDetailModal({
   onReceipt: (tx: Transaction) => void;
   categoryOptions: { value: string; label: string }[];
 }) {
+  const supabase = createClient();
+  const [linkedReceipt, setLinkedReceipt] = useState<ReceiptRecord | null>(null);
+
+  useEffect(() => {
+    if (!tx.receipt_id) { setLinkedReceipt(null); return; }
+    (supabase as any)
+      .from('receipts')
+      .select('id,file_path,file_name,vendor,amount,date,category,gst_amount,qst_amount,transaction_id')
+      .eq('id', tx.receipt_id)
+      .single()
+      .then(({ data }: any) => setLinkedReceipt(data ?? null));
+  }, [tx.receipt_id]);
+
   const catLabel = categoryOptions.find((c) => c.value === tx.category)?.label || tx.category;
   const typeColors: Record<string, string> = {
     expense: 'text-red-600 bg-red-50',
@@ -602,16 +617,53 @@ function TransactionDetailModal({
           )}
         </div>
 
+        {/* Receipt preview */}
+        {linkedReceipt && (
+          <div className="px-6 pb-4 border-t border-gray-50 pt-4">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Reçu</p>
+            <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
+              <SignedImage filePath={linkedReceipt.file_path} fileName={linkedReceipt.file_name} />
+              <div className="flex-1 min-w-0">
+                {linkedReceipt.vendor && (
+                  <p className="text-sm font-semibold text-gray-900 truncate">{linkedReceipt.vendor}</p>
+                )}
+                {linkedReceipt.amount != null && (
+                  <p className="text-sm font-medium text-gray-700">{formatCurrency(linkedReceipt.amount)}</p>
+                )}
+                {linkedReceipt.date && (
+                  <p className="text-xs text-gray-400 mt-0.5">{formatDate(linkedReceipt.date)}</p>
+                )}
+                {(linkedReceipt.gst_amount != null || linkedReceipt.qst_amount != null) && (
+                  <div className="flex gap-3 mt-1.5">
+                    {linkedReceipt.gst_amount != null && (
+                      <span className="text-xs text-gray-500">TPS {formatCurrency(linkedReceipt.gst_amount)}</span>
+                    )}
+                    {linkedReceipt.qst_amount != null && (
+                      <span className="text-xs text-gray-500">TVQ {formatCurrency(linkedReceipt.qst_amount)}</span>
+                    )}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => onReceipt(tx)}
+                className="flex-shrink-0 text-xs text-tenir-600 hover:text-tenir-700 font-medium flex items-center gap-1"
+              >
+                <Edit2 size={11} /> Gérer
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Actions */}
         <div className="px-6 pb-5 flex gap-2 border-t border-gray-50 pt-4">
-          <button
-            onClick={() => onReceipt(tx)}
-            className={cn('flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-colors flex-1 justify-center',
-              tx.receipt_id ? 'bg-tenir-50 text-tenir-600 hover:bg-tenir-100' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')}
-          >
-            <Paperclip size={14} />
-            {tx.receipt_id ? 'View receipt' : 'Attach receipt'}
-          </button>
+          {!tx.receipt_id && (
+            <button
+              onClick={() => onReceipt(tx)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-colors flex-1 justify-center bg-gray-100 text-gray-600 hover:bg-gray-200"
+            >
+              <Paperclip size={14} /> Attacher un reçu
+            </button>
+          )}
           <button
             onClick={() => onEdit(tx)}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors flex-1 justify-center"

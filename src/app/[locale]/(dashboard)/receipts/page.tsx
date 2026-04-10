@@ -281,6 +281,7 @@ function ReceiptDetailModal({ receipt, linkedTx, orphanTxs, onClose, onLink, onU
   onUnlink: (receiptId: string, txId: string) => void;
   onUpdateCategory: (receiptId: string, category: string) => void;
 }) {
+  const t = useTranslations('receipts');
   const { url } = useSignedUrl(receipt.file_path);
   const isPdf = (receipt.file_name || receipt.file_path || '').toLowerCase().endsWith('.pdf');
   const [showLinkSearch, setShowLinkSearch] = useState(false);
