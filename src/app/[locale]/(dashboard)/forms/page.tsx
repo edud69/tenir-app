@@ -72,18 +72,27 @@ function getStatusIcon(status: string) {
   }
 }
 
+const STATUS_NEXT: Record<string, { label: string; next: GovernmentForm['status']; color: string }> = {
+  draft:     { label: 'Marquer prêt',    next: 'ready',     color: 'bg-amber-500 hover:bg-amber-600 text-white' },
+  ready:     { label: 'Soumettre',       next: 'submitted', color: 'bg-tenir-500 hover:bg-tenir-600 text-white' },
+  submitted: { label: 'Marquer accepté', next: 'accepted',  color: 'bg-emerald-500 hover:bg-emerald-600 text-white' },
+};
+
 function FormCard({
   form,
   onPreview,
   onDelete,
+  onAdvanceStatus,
 }: {
   form: GovernmentForm;
   onPreview: (form: GovernmentForm) => void;
   onDelete: (id: string) => void;
+  onAdvanceStatus: (form: GovernmentForm, next: GovernmentForm['status']) => void;
 }) {
   const t = useTranslations('forms');
   const apiFormType = FORM_TYPE_MAP[form.form_type] || form.form_type.toUpperCase();
   const isFederal = FEDERAL_FORMS.includes(form.form_type);
+  const nextStep = STATUS_NEXT[form.status];
 
   return (
     <Card padding="md" shadow="sm" className="bg-white flex flex-col h-full">
@@ -113,10 +122,35 @@ function FormCard({
         <p className="text-xs text-gray-400 mt-1">{t('generatedOn')} {form.created_at.split('T')[0]}</p>
       </div>
 
+      {/* Status progress indicator */}
+      <div className="flex items-center gap-1 mb-4">
+        {(['draft', 'ready', 'submitted', 'accepted'] as const).map((s, i) => {
+          const statuses = ['draft', 'ready', 'submitted', 'accepted'];
+          const currentIdx = statuses.indexOf(form.status);
+          const stepIdx = statuses.indexOf(s);
+          const done = stepIdx < currentIdx;
+          const active = stepIdx === currentIdx;
+          return (
+            <React.Fragment key={s}>
+              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${done ? 'bg-emerald-400' : active ? 'bg-tenir-500' : 'bg-gray-200'}`} />
+              {i < 3 && <div className={`flex-1 h-px ${done ? 'bg-emerald-300' : 'bg-gray-200'}`} />}
+            </React.Fragment>
+          );
+        })}
+      </div>
+
       <div className="flex gap-2 flex-wrap">
         <Button variant="outline" size="sm" icon={<Eye size={14} />} onClick={() => onPreview(form)}>
           {t('preview')}
         </Button>
+        {nextStep && (
+          <button
+            onClick={() => onAdvanceStatus(form, nextStep.next)}
+            className={`flex-1 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${nextStep.color}`}
+          >
+            {nextStep.label}
+          </button>
+        )}
         <Button
           variant="ghost"
           size="sm"
@@ -124,22 +158,54 @@ function FormCard({
           onClick={() => {
             if (window.confirm(t('deleteConfirm'))) onDelete(form.id);
           }}
-          className="text-red-500 hover:bg-red-50"
+          className="text-red-400 hover:bg-red-50"
         />
       </div>
     </Card>
   );
 }
 
-function PreviewModal({ form, onClose }: { form: GovernmentForm | null; onClose: () => void }) {
+function PreviewModal({
+  form, onClose, onAdvanceStatus,
+}: {
+  form: GovernmentForm | null;
+  onClose: () => void;
+  onAdvanceStatus: (form: GovernmentForm, next: GovernmentForm['status']) => void;
+}) {
   const t = useTranslations('forms');
   if (!form) return null;
 
   const sections = form.data?.sections || [];
   const apiFormType = FORM_TYPE_MAP[form.form_type] || form.form_type.toUpperCase();
+  const nextStep = STATUS_NEXT[form.status];
 
   return (
-    <Modal isOpen={!!form} onClose={onClose} title={`${apiFormType} — ${t('taxYear')} ${form.tax_year}`} size="lg">
+    <Modal
+      isOpen={!!form}
+      onClose={onClose}
+      title={`${apiFormType} — ${t('taxYear')} ${form.tax_year}`}
+      size="lg"
+      footer={
+        <div className="flex items-center justify-between gap-3 w-full">
+          <div className="flex items-center gap-2">
+            <Badge variant={getStatusVariant(form.status)} size="sm" dot>
+              {t(`status.${form.status}` as any)}
+            </Badge>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onClose}>Fermer</Button>
+            {nextStep && (
+              <button
+                onClick={() => { onAdvanceStatus(form, nextStep.next); onClose(); }}
+                className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${nextStep.color}`}
+              >
+                {nextStep.label}
+              </button>
+            )}
+          </div>
+        </div>
+      }
+    >
       <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
         {sections.length === 0 ? (
           <p className="text-gray-500 text-sm">{t('noFormsGenerated')}</p>
@@ -252,6 +318,20 @@ export default function FormsPage() {
     }
   };
 
+  const handleAdvanceStatus = async (form: GovernmentForm, next: GovernmentForm['status']) => {
+    const updates: Record<string, any> = { status: next };
+    if (next === 'submitted') updates.submitted_at = new Date().toISOString();
+    const { error } = await (supabase as any)
+      .from('government_forms')
+      .update(updates)
+      .eq('id', form.id);
+    if (!error) {
+      setForms((prev) => prev.map((f) => f.id === form.id ? { ...f, ...updates } : f));
+      // refresh previewForm if open on same record
+      setPreviewForm((prev) => prev?.id === form.id ? { ...prev, ...updates } : prev);
+    }
+  };
+
   const handleDelete = async (id: string) => {
     await (supabase as any).from('government_forms').delete().eq('id', id);
     setForms((prev) => prev.filter((f) => f.id !== id));
@@ -344,7 +424,7 @@ export default function FormsPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-10">
               {displayedForms.map((form) => (
-                <FormCard key={form.id} form={form} onPreview={setPreviewForm} onDelete={handleDelete} />
+                <FormCard key={form.id} form={form} onPreview={setPreviewForm} onDelete={handleDelete} onAdvanceStatus={handleAdvanceStatus} />
               ))}
             </div>
           )}
@@ -391,7 +471,7 @@ export default function FormsPage() {
       </div>
 
       {/* Preview Modal */}
-      <PreviewModal form={previewForm} onClose={() => setPreviewForm(null)} />
+      <PreviewModal form={previewForm} onClose={() => setPreviewForm(null)} onAdvanceStatus={handleAdvanceStatus} />
 
       {/* Generate Modal */}
       <Modal
