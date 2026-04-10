@@ -13,6 +13,8 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from 'recharts';
+import { Input } from '@/components/ui/input';
+import { Modal } from '@/components/ui/modal';
 import {
   TrendingUp,
   DollarSign,
@@ -21,9 +23,16 @@ import {
   Calculator,
   RefreshCw,
   Building2,
+  Plus,
+  Trash2,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  CreditCard,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useOrganization } from '@/hooks/useOrganization';
+import { formatDate, cn } from '@/lib/utils';
 
 interface TaxInstallment {
   quarter: number;
@@ -38,6 +47,22 @@ interface IntegrationRow {
   nonEligibleDiv: number;
   totalCost: number;
   savings: number;
+}
+
+interface TaxPayment {
+  id: string;
+  organization_id: string;
+  tax_year: number;
+  authority: 'federal' | 'provincial';
+  payment_type: 'installment' | 'balance_owing' | 'arrears';
+  quarter: number | null;
+  amount: number;
+  due_amount: number | null;
+  payment_date: string;
+  payment_method: string;
+  reference_number: string | null;
+  notes: string | null;
+  created_at: string;
 }
 
 interface TaxProfile {
@@ -70,6 +95,11 @@ export default function TaxesPage() {
   const [calculating, setCalculating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Tax payments state
+  const [payments, setPayments] = useState<TaxPayment[]>([]);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentDefaults, setPaymentDefaults] = useState<Partial<TaxPayment> | undefined>();
+
   const yearOptions = [
     { value: '2026', label: '2026' },
     { value: '2025', label: '2025' },
@@ -80,7 +110,48 @@ export default function TaxesPage() {
   useEffect(() => {
     if (!orgId) return;
     fetchTaxProfile();
+    fetchPayments();
   }, [orgId, selectedYear]);
+
+  async function fetchPayments() {
+    if (!orgId) return;
+    const { data } = await (supabase as any)
+      .from('tax_payments')
+      .select('*')
+      .eq('organization_id', orgId)
+      .eq('tax_year', parseInt(selectedYear))
+      .order('payment_date', { ascending: false });
+    setPayments(data || []);
+  }
+
+  async function handleAddPayment(fd: TaxPaymentFormData) {
+    if (!orgId) return;
+    const { data, error: err } = await (supabase as any)
+      .from('tax_payments')
+      .insert({
+        organization_id: orgId,
+        tax_year:         parseInt(selectedYear),
+        authority:        fd.authority,
+        payment_type:     fd.payment_type,
+        quarter:          fd.quarter || null,
+        amount:           parseFloat(fd.amount),
+        due_amount:       fd.due_amount ? parseFloat(fd.due_amount) : null,
+        payment_date:     fd.payment_date,
+        payment_method:   fd.payment_method,
+        reference_number: fd.reference_number || null,
+        notes:            fd.notes || null,
+      })
+      .select()
+      .single();
+    if (err) { setError(err.message); return; }
+    setPayments((p) => [data, ...p]);
+  }
+
+  async function handleDeletePayment(id: string) {
+    if (!confirm('Supprimer ce paiement ?')) return;
+    await (supabase as any).from('tax_payments').delete().eq('id', id);
+    setPayments((p) => p.filter((x) => x.id !== id));
+  }
 
   async function fetchTaxProfile() {
     setDataLoading(true);
@@ -468,8 +539,418 @@ export default function TaxesPage() {
               )}
             </>
           )}
+
+          {/* ── Tax Payments ── */}
+          <TaxPaymentsSection
+            year={parseInt(selectedYear)}
+            payments={payments}
+            federalTax={taxProfile?.federal_tax ?? null}
+            provincialTax={taxProfile?.provincial_tax ?? null}
+            onAdd={(defaults) => { setPaymentDefaults(defaults); setShowPaymentModal(true); }}
+            onDelete={handleDeletePayment}
+          />
+
         </div>
       </div>
+
+      {showPaymentModal && (
+        <TaxPaymentModal
+          year={parseInt(selectedYear)}
+          defaults={paymentDefaults}
+          onClose={() => { setShowPaymentModal(false); setPaymentDefaults(undefined); }}
+          onSubmit={handleAddPayment}
+        />
+      )}
+
+    </div>
+  );
+}
+
+// ── Tax Payment Form ─────────────────────────────────────────────────────────
+
+interface TaxPaymentFormData {
+  authority: 'federal' | 'provincial';
+  payment_type: 'installment' | 'balance_owing' | 'arrears';
+  quarter: string;
+  amount: string;
+  due_amount: string;
+  payment_date: string;
+  payment_method: string;
+  reference_number: string;
+  notes: string;
+}
+
+function TaxPaymentModal({ year, defaults, onClose, onSubmit }: {
+  year: number;
+  defaults?: Partial<TaxPayment>;
+  onClose: () => void;
+  onSubmit: (fd: TaxPaymentFormData) => void;
+}) {
+  const [fd, setFd] = useState<TaxPaymentFormData>({
+    authority:        defaults?.authority        ?? 'federal',
+    payment_type:     defaults?.payment_type     ?? 'installment',
+    quarter:          defaults?.quarter != null  ? String(defaults.quarter) : '',
+    amount:           defaults?.due_amount != null ? String(defaults.due_amount) : '',
+    due_amount:       defaults?.due_amount != null ? String(defaults.due_amount) : '',
+    payment_date:     new Date().toISOString().split('T')[0],
+    payment_method:   'online',
+    reference_number: '',
+    notes:            '',
+  });
+
+  const authorityLabel = fd.authority === 'federal' ? 'ARC — Fédéral' : 'Revenu Québec — Provincial';
+
+  return (
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title="Enregistrer un paiement d'impôt"
+      size="md"
+      footer={
+        <div className="flex gap-3">
+          <Button variant="ghost" fullWidth onClick={onClose}>Annuler</Button>
+          <Button
+            variant="primary"
+            fullWidth
+            disabled={!fd.amount || !fd.payment_date}
+            onClick={() => { onSubmit(fd); onClose(); }}
+          >
+            Enregistrer
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-4">
+        {/* Authority + type row */}
+        <div className="grid grid-cols-2 gap-4">
+          <Select
+            label="Autorité fiscale"
+            value={fd.authority}
+            onChange={(v) => setFd({ ...fd, authority: v as 'federal' | 'provincial' })}
+            options={[
+              { value: 'federal',    label: 'ARC — Fédéral' },
+              { value: 'provincial', label: 'Revenu Québec' },
+            ]}
+          />
+          <Select
+            label="Type de paiement"
+            value={fd.payment_type}
+            onChange={(v) => setFd({ ...fd, payment_type: v as TaxPaymentFormData['payment_type'] })}
+            options={[
+              { value: 'installment',   label: 'Acompte provisionnel' },
+              { value: 'balance_owing', label: 'Solde dû (fin d\'année)' },
+              { value: 'arrears',       label: 'Arriérés' },
+            ]}
+          />
+        </div>
+
+        {/* Quarter — only for installments */}
+        {fd.payment_type === 'installment' && (
+          <Select
+            label="Trimestre"
+            value={fd.quarter}
+            onChange={(v) => setFd({ ...fd, quarter: v as string })}
+            options={[
+              { value: '1', label: 'T1 — Échéance 15 mars' },
+              { value: '2', label: 'T2 — Échéance 15 juin' },
+              { value: '3', label: 'T3 — Échéance 15 septembre' },
+              { value: '4', label: 'T4 — Échéance 15 décembre' },
+            ]}
+            placeholder="Sélectionner un trimestre"
+          />
+        )}
+
+        <div className="grid grid-cols-2 gap-4">
+          <Input
+            label="Montant payé ($)"
+            type="number"
+            step="0.01"
+            value={fd.amount}
+            onChange={(e) => setFd({ ...fd, amount: e.target.value })}
+            placeholder="0.00"
+            required
+          />
+          <Input
+            label="Date de paiement"
+            type="date"
+            value={fd.payment_date}
+            onChange={(e) => setFd({ ...fd, payment_date: e.target.value })}
+            required
+          />
+        </div>
+
+        <Select
+          label="Mode de paiement"
+          value={fd.payment_method}
+          onChange={(v) => setFd({ ...fd, payment_method: v as string })}
+          options={[
+            { value: 'online',         label: 'En ligne (institution financière)' },
+            { value: 'my_account',     label: 'Mon dossier ARC / Mon dossier RQ' },
+            { value: 'preauthorized',  label: 'Débit préautorisé' },
+            { value: 'cheque',         label: 'Chèque' },
+            { value: 'other',          label: 'Autre' },
+          ]}
+        />
+
+        <Input
+          label="Numéro de confirmation / référence"
+          value={fd.reference_number}
+          onChange={(e) => setFd({ ...fd, reference_number: e.target.value })}
+          placeholder="Optionnel"
+        />
+
+        <Input
+          label="Notes"
+          value={fd.notes}
+          onChange={(e) => setFd({ ...fd, notes: e.target.value })}
+          placeholder="Optionnel"
+        />
+
+        <div className="p-3 bg-tenir-50 border border-tenir-100 rounded-xl text-xs text-tenir-700">
+          <span className="font-semibold">{authorityLabel}</span> · Année fiscale {year}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ── Tax Payments Section ─────────────────────────────────────────────────────
+
+const INSTALLMENT_DATES: Record<number, string> = {
+  1: '15 mars', 2: '15 juin', 3: '15 septembre', 4: '15 décembre',
+};
+
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  online: 'En ligne', my_account: 'Mon dossier', preauthorized: 'Débit préautorisé',
+  cheque: 'Chèque', other: 'Autre',
+};
+
+const PAYMENT_TYPE_LABELS: Record<string, string> = {
+  installment: 'Acompte', balance_owing: 'Solde dû', arrears: 'Arriérés',
+};
+
+function TaxPaymentsSection({ year, payments, federalTax, provincialTax, onAdd, onDelete }: {
+  year: number;
+  payments: TaxPayment[];
+  federalTax: number | null;
+  provincialTax: number | null;
+  onAdd: (defaults?: Partial<TaxPayment>) => void;
+  onDelete: (id: string) => void;
+}) {
+  const federalInstallments = payments.filter((p) => p.authority === 'federal' && p.payment_type === 'installment');
+  const provincialInstallments = payments.filter((p) => p.authority === 'provincial' && p.payment_type === 'installment');
+  const otherPayments = payments.filter((p) => p.payment_type !== 'installment');
+
+  const quarterlyFederal   = federalTax   != null ? federalTax   / 4 : null;
+  const quarterlyProvincial = provincialTax != null ? provincialTax / 4 : null;
+
+  function paidForQuarter(auth: 'federal' | 'provincial', q: number) {
+    return payments
+      .filter((p) => p.authority === auth && p.payment_type === 'installment' && p.quarter === q)
+      .reduce((s, p) => s + p.amount, 0);
+  }
+
+  function QuarterRow({ auth, q, expected }: { auth: 'federal' | 'provincial'; q: number; expected: number | null }) {
+    const paid = paidForQuarter(auth, q);
+    const dueDate = `${INSTALLMENT_DATES[q]} ${year}`;
+    const isPast = (() => {
+      const [day, month] = INSTALLMENT_DATES[q].split(' ');
+      const months: Record<string, number> = { mars: 2, juin: 5, septembre: 8, décembre: 11 };
+      return new Date(year, months[month], parseInt(day)) < new Date();
+    })();
+    const isFullyPaid = expected != null && paid >= expected * 0.99;
+    const isPartial   = paid > 0 && !isFullyPaid;
+    const isUnpaid    = paid === 0;
+
+    return (
+      <div className={cn(
+        'flex items-center gap-3 p-3 rounded-xl border transition-all',
+        isFullyPaid ? 'bg-emerald-50/60 border-emerald-100'
+          : isPartial ? 'bg-amber-50/60 border-amber-100'
+          : isPast    ? 'bg-red-50/40 border-red-100'
+          : 'bg-gray-50 border-gray-100'
+      )}>
+        {/* Status icon */}
+        <div className="flex-shrink-0">
+          {isFullyPaid
+            ? <CheckCircle2 size={16} className="text-emerald-500" />
+            : isPartial
+            ? <Clock size={16} className="text-amber-500" />
+            : isPast
+            ? <AlertCircle size={16} className="text-red-400" />
+            : <Clock size={16} className="text-gray-300" />}
+        </div>
+
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-bold text-gray-700">T{q}</span>
+            <span className="text-xs text-gray-400">· {dueDate}</span>
+          </div>
+          <div className="flex items-center gap-2 mt-0.5">
+            {expected != null && (
+              <span className="text-xs text-gray-400">Attendu: {formatCurrency(expected)}</span>
+            )}
+            {paid > 0 && (
+              <span className={cn('text-xs font-semibold', isFullyPaid ? 'text-emerald-600' : 'text-amber-600')}>
+                Payé: {formatCurrency(paid)}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Pay button */}
+        {!isFullyPaid && (
+          <button
+            onClick={() => onAdd({
+              authority: auth,
+              payment_type: 'installment',
+              quarter: q,
+              due_amount: expected ?? undefined,
+            } as any)}
+            className="flex-shrink-0 text-xs px-2.5 py-1 rounded-lg bg-tenir-500 text-white hover:bg-tenir-600 font-medium transition-colors"
+          >
+            Payer
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-8 bg-white rounded-2xl border border-gray-200 p-6">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-xl bg-tenir-50 flex items-center justify-center">
+            <CreditCard size={17} className="text-tenir-600" />
+          </div>
+          <div>
+            <h3 className="text-base font-semibold text-gray-900">Paiements d'impôts</h3>
+            <p className="text-xs text-gray-400">Acomptes provisionnels et soldes dus — {year}</p>
+          </div>
+        </div>
+        <Button variant="primary" icon={<Plus size={15} />} onClick={() => onAdd()}>
+          Enregistrer un paiement
+        </Button>
+      </div>
+
+      {/* Two-column: Federal | Provincial */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        {/* Federal */}
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">ARC — Fédéral</span>
+            {federalTax != null && (
+              <span className="text-xs text-gray-400">
+                · Total estimé: {formatCurrency(federalTax)}
+              </span>
+            )}
+          </div>
+          <div className="space-y-2">
+            {[1, 2, 3, 4].map((q) => (
+              <QuarterRow key={q} auth="federal" q={q} expected={quarterlyFederal} />
+            ))}
+          </div>
+          {/* Non-installment federal payments */}
+          {payments.filter((p) => p.authority === 'federal' && p.payment_type !== 'installment').map((p) => (
+            <div key={p.id} className="flex items-center gap-3 p-3 mt-2 rounded-xl bg-blue-50/50 border border-blue-100">
+              <CheckCircle2 size={15} className="text-blue-500 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-gray-700">{PAYMENT_TYPE_LABELS[p.payment_type]}</p>
+                <p className="text-xs text-gray-400">{formatDate(p.payment_date)}</p>
+              </div>
+              <span className="text-sm font-bold text-gray-900">{formatCurrency(p.amount)}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Provincial */}
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Revenu Québec — Provincial</span>
+            {provincialTax != null && (
+              <span className="text-xs text-gray-400">
+                · Total estimé: {formatCurrency(provincialTax)}
+              </span>
+            )}
+          </div>
+          <div className="space-y-2">
+            {[1, 2, 3, 4].map((q) => (
+              <QuarterRow key={q} auth="provincial" q={q} expected={quarterlyProvincial} />
+            ))}
+          </div>
+          {payments.filter((p) => p.authority === 'provincial' && p.payment_type !== 'installment').map((p) => (
+            <div key={p.id} className="flex items-center gap-3 p-3 mt-2 rounded-xl bg-blue-50/50 border border-blue-100">
+              <CheckCircle2 size={15} className="text-blue-500 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-gray-700">{PAYMENT_TYPE_LABELS[p.payment_type]}</p>
+                <p className="text-xs text-gray-400">{formatDate(p.payment_date)}</p>
+              </div>
+              <span className="text-sm font-bold text-gray-900">{formatCurrency(p.amount)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Payment history */}
+      {payments.length > 0 && (
+        <div className="border-t border-gray-100 pt-5">
+          <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Historique des paiements</h4>
+          <div className="space-y-1.5">
+            {payments.map((p) => (
+              <div key={p.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-50 group">
+                <div className={cn(
+                  'w-2 h-2 rounded-full flex-shrink-0',
+                  p.authority === 'federal' ? 'bg-blue-400' : 'bg-tenir-400'
+                )} />
+                <div className="flex-1 min-w-0 grid grid-cols-4 gap-2 text-sm">
+                  <span className="text-gray-500 text-xs">{formatDate(p.payment_date)}</span>
+                  <span className={cn('text-xs font-medium', p.authority === 'federal' ? 'text-blue-600' : 'text-tenir-600')}>
+                    {p.authority === 'federal' ? 'ARC' : 'Rev. QC'}
+                    {p.payment_type === 'installment' && p.quarter ? ` T${p.quarter}` : ''}
+                  </span>
+                  <span className="text-xs text-gray-400">{PAYMENT_TYPE_LABELS[p.payment_type]}</span>
+                  <span className="text-xs font-semibold text-gray-900 text-right">{formatCurrency(p.amount)}</span>
+                </div>
+                {p.reference_number && (
+                  <span className="text-xs text-gray-300 hidden group-hover:inline truncate max-w-[100px]">
+                    #{p.reference_number}
+                  </span>
+                )}
+                <button
+                  onClick={() => onDelete(p.id)}
+                  className="flex-shrink-0 opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-50 text-gray-300 hover:text-red-400 transition-all"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* Summary */}
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
+              <p className="text-xs text-blue-500 font-medium mb-0.5">Total payé — ARC</p>
+              <p className="text-base font-bold text-blue-700">
+                {formatCurrency(payments.filter((p) => p.authority === 'federal').reduce((s, p) => s + p.amount, 0))}
+              </p>
+            </div>
+            <div className="p-3 bg-tenir-50 rounded-xl border border-tenir-100">
+              <p className="text-xs text-tenir-500 font-medium mb-0.5">Total payé — Revenu Québec</p>
+              <p className="text-base font-bold text-tenir-700">
+                {formatCurrency(payments.filter((p) => p.authority === 'provincial').reduce((s, p) => s + p.amount, 0))}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {payments.length === 0 && (
+        <div className="text-center py-8 text-sm text-gray-400 border-t border-gray-100 pt-5 mt-2">
+          Aucun paiement enregistré pour {year}. Cliquez sur «&nbsp;Enregistrer un paiement&nbsp;» pour commencer.
+        </div>
+      )}
     </div>
   );
 }
