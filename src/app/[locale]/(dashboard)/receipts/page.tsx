@@ -495,7 +495,7 @@ function Field({ icon, label, value }: { icon: React.ReactNode; label: string; v
 
 function DropzoneArea({ orgId, userId, onReceiptCreated }: {
   orgId: string; userId: string;
-  onReceiptCreated: (receipt: ReceiptItem) => void;
+  onReceiptCreated: (receipt: ReceiptItem) => Promise<void>;
 }) {
   const supabase = createClient();
   const [queue, setQueue] = useState<{ id: string; name: string; status: UploadStatus; msg?: string }[]>([]);
@@ -557,8 +557,13 @@ function DropzoneArea({ orgId, userId, onReceiptCreated }: {
         if (insertErr) throw new Error(insertErr.message);
 
         setItemStatus(tempId, 'creating');
-        onReceiptCreated(receipt);
-        setItemStatus(tempId, 'done', receipt.vendor ? `${receipt.vendor} · ${ocr?.totalAmount ? formatCurrency(ocr.totalAmount) : 'pending'}` : undefined);
+        await onReceiptCreated(receipt);
+        const label = [
+          receipt.vendor,
+          ocr?.totalAmount ? formatCurrency(ocr.totalAmount) : null,
+          category && category !== 'other' ? category : null,
+        ].filter(Boolean).join(' · ');
+        setItemStatus(tempId, 'done', label || 'Receipt saved — transaction created');
       } catch (e: any) {
         setItemStatus(tempId, 'error', e.message || 'Error');
       }
@@ -669,18 +674,18 @@ export default function ReceiptsPage() {
    *   filling gaps with sensible defaults.
    */
   const ensureTransaction = useCallback(async (receipt: ReceiptItem, overrideCategory?: string) => {
-    if (!orgId) return;
+    if (!orgId || !user) return;
 
-    const category = overrideCategory || receipt.category || 'other';
-    const amount   = receipt.amount ?? 0;
-    const date     = receipt.date || receipt.created_at?.split('T')[0] || new Date().toISOString().split('T')[0];
+    const category    = overrideCategory || receipt.category || 'other';
+    const amount      = receipt.amount ?? 0;
+    const date        = receipt.date || receipt.created_at?.split('T')[0] || new Date().toISOString().split('T')[0];
     const description = receipt.vendor || receipt.file_name?.replace(/\.[^.]+$/, '') || 'Receipt';
 
     // 1. Try to find and link an existing match
     const match = findMatchingTx({ ...receipt, category });
     if (match) {
       await (supabase as any).from('transactions').update({ receipt_id: receipt.id }).eq('id', match.id);
-      await (supabase as any).from('receipts').update({ category, status: 'verified' }).eq('id', receipt.id);
+      await (supabase as any).from('receipts').update({ category, status: 'verified', transaction_id: match.id }).eq('id', receipt.id);
       setTransactions((prev) => prev.map((tx) => tx.id === match.id ? { ...tx, receipt_id: receipt.id } : tx));
       setReceipts((prev) => prev.map((r) => r.id === receipt.id ? { ...r, category, status: 'verified', transaction_id: match.id } : r));
       if (detailReceipt?.id === receipt.id) setDetailReceipt((r) => r ? { ...r, category, status: 'verified', transaction_id: match.id } : r);
@@ -688,39 +693,48 @@ export default function ReceiptsPage() {
     }
 
     // 2. Create a new transaction
-    const { data: tx } = await (supabase as any)
+    const { data: tx, error: txErr } = await (supabase as any)
       .from('transactions')
       .insert({
         organization_id: orgId,
+        created_by: user.id,
         type: 'expense',
-        amount: -Math.abs(amount),
+        amount: amount > 0 ? -amount : amount === 0 ? 0 : amount,
         date,
         description,
         category,
-        vendor: receipt.vendor,
-        gst_amount: receipt.gst_amount,
-        qst_amount: receipt.qst_amount,
+        vendor: receipt.vendor || null,
         receipt_id: receipt.id,
         currency: 'CAD',
+        is_recurring: false,
       })
       .select()
       .single();
 
-    await (supabase as any).from('receipts').update({ category, status: 'verified' }).eq('id', receipt.id);
+    if (txErr) {
+      console.error('[ensureTransaction] insert error:', txErr.message);
+      return;
+    }
 
-    if (tx) setTransactions((prev) => [...prev, tx]);
-    setReceipts((prev) => prev.map((r) => r.id === receipt.id ? { ...r, category, status: 'verified', transaction_id: tx?.id } : r));
-    if (detailReceipt?.id === receipt.id) setDetailReceipt((r) => r ? { ...r, category, status: 'verified', transaction_id: tx?.id } : r);
-  }, [orgId, transactions, detailReceipt]);
+    // Update receipt with transaction link + verified status
+    await (supabase as any)
+      .from('receipts')
+      .update({ category, status: 'verified', transaction_id: tx.id })
+      .eq('id', receipt.id);
+
+    setTransactions((prev) => [...prev, tx]);
+    setReceipts((prev) => prev.map((r) => r.id === receipt.id ? { ...r, category, status: 'verified', transaction_id: tx.id } : r));
+    if (detailReceipt?.id === receipt.id) setDetailReceipt((r) => r ? { ...r, category, status: 'verified', transaction_id: tx.id } : r);
+  }, [orgId, user, transactions, detailReceipt]);
 
   // Called when a new receipt arrives from the dropzone
-  const handleReceiptCreated = useCallback(async (receipt: ReceiptItem) => {
+  const handleReceiptCreated = useCallback(async (receipt: ReceiptItem): Promise<void> => {
     setReceipts((prev) => [receipt, ...prev]);
     if (receipt.category) {
-      // Category known — auto-create/link immediately
+      // Category known from OCR — auto-create/link transaction immediately
       await ensureTransaction(receipt);
     } else {
-      // Ask user for category
+      // Ask user for category then create
       setCategoryReceipt(receipt);
     }
   }, [ensureTransaction]);

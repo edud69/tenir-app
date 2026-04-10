@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useTranslations } from 'next-intl';
+import Link from 'next/link';
+import { useTranslations, useLocale } from 'next-intl';
 import { formatCurrency, formatPercent } from '@/lib/utils';
 import Header from '@/components/layout/header';
 import { Button } from '@/components/ui/button';
@@ -21,6 +22,8 @@ import {
   Calculator,
   RefreshCw,
   Building2,
+  ChevronRight,
+  CreditCard,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useOrganization } from '@/hooks/useOrganization';
@@ -61,6 +64,7 @@ interface TaxProfile {
 export default function TaxesPage() {
   const t = useTranslations('taxes');
   const commonT = useTranslations('common');
+  const locale = useLocale();
   const { orgId, loading: orgLoading } = useOrganization();
   const supabase = createClient();
 
@@ -69,6 +73,7 @@ export default function TaxesPage() {
   const [dataLoading, setDataLoading] = useState(false);
   const [calculating, setCalculating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [paymentTotals, setPaymentTotals] = useState<{ federal: number; provincial: number }>({ federal: 0, provincial: 0 });
 
   const yearOptions = [
     { value: '2026', label: '2026' },
@@ -80,7 +85,25 @@ export default function TaxesPage() {
   useEffect(() => {
     if (!orgId) return;
     fetchTaxProfile();
+    fetchPaymentTotals();
   }, [orgId, selectedYear]);
+
+  async function fetchPaymentTotals() {
+    if (!orgId) return;
+    try {
+      const { data } = await (supabase as any)
+        .from('tax_payments')
+        .select('authority, amount')
+        .eq('organization_id', orgId)
+        .eq('tax_year', parseInt(selectedYear));
+      if (!data) return;
+      const federal = data.filter((r: any) => r.authority === 'federal').reduce((s: number, r: any) => s + (r.amount ?? 0), 0);
+      const provincial = data.filter((r: any) => r.authority === 'provincial').reduce((s: number, r: any) => s + (r.amount ?? 0), 0);
+      setPaymentTotals({ federal, provincial });
+    } catch {
+      // non-blocking
+    }
+  }
 
   async function fetchTaxProfile() {
     setDataLoading(true);
@@ -425,6 +448,62 @@ export default function TaxesPage() {
                   </div>
                 </div>
               )}
+
+              {/* Tax Payments Preview */}
+              <div className="bg-white rounded-2xl border border-gray-200 p-6 mb-6">
+                <div className="flex items-center justify-between mb-5">
+                  <div className="flex items-center gap-2.5">
+                    <CreditCard size={18} className="text-gray-400" />
+                    <h3 className="text-base font-semibold text-gray-900">{t('installments')}</h3>
+                  </div>
+                  <Link
+                    href={`/${locale}/tax-payments`}
+                    className="flex items-center gap-1 text-sm text-tenir-600 hover:text-tenir-700 font-medium transition-colors"
+                  >
+                    Voir les paiements <ChevronRight size={14} />
+                  </Link>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Federal */}
+                  <div className="rounded-xl bg-blue-50 border border-blue-100 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-blue-500 mb-1">{t('federalTax')}</p>
+                    <p className="text-xl font-bold text-blue-700">{formatCurrency(paymentTotals.federal)}</p>
+                    <p className="text-xs text-blue-400 mt-1">payé en {selectedYear}</p>
+                    {federalTax > 0 && (
+                      <div className="mt-2">
+                        <div className="h-1.5 rounded-full bg-blue-100 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-blue-400 transition-all"
+                            style={{ width: `${Math.min(100, (paymentTotals.federal / federalTax) * 100)}%` }}
+                          />
+                        </div>
+                        <p className="text-xs text-blue-400 mt-1">
+                          {Math.round((paymentTotals.federal / federalTax) * 100)}% de {formatCurrency(federalTax)}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                  {/* Provincial */}
+                  <div className="rounded-xl bg-purple-50 border border-purple-100 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-purple-500 mb-1">{t('provincialTax')}</p>
+                    <p className="text-xl font-bold text-purple-700">{formatCurrency(paymentTotals.provincial)}</p>
+                    <p className="text-xs text-purple-400 mt-1">payé en {selectedYear}</p>
+                    {provincialTax > 0 && (
+                      <div className="mt-2">
+                        <div className="h-1.5 rounded-full bg-purple-100 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-purple-400 transition-all"
+                            style={{ width: `${Math.min(100, (paymentTotals.provincial / provincialTax) * 100)}%` }}
+                          />
+                        </div>
+                        <p className="text-xs text-purple-400 mt-1">
+                          {Math.round((paymentTotals.provincial / provincialTax) * 100)}% de {formatCurrency(provincialTax)}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
 
               {/* Integration model */}
               {integrationData.length > 0 && (
