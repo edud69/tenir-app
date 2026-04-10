@@ -586,13 +586,19 @@ function TransactionDetailModal({
   useEffect(() => {
     if (!tx.receipt_id) { setLinkedReceipt(null); setReceiptLoading(false); return; }
     setReceiptLoading(true);
-    (supabase as any)
+    let query = (supabase as any)
       .from('receipts')
-      .select('id,file_path,file_name,vendor,amount,date,category,gst_amount,qst_amount,transaction_id')
-      .eq('id', tx.receipt_id)
-      .single()
-      .then(({ data }: any) => { setLinkedReceipt(data ?? null); setReceiptLoading(false); })
-      .catch(() => { setLinkedReceipt(null); setReceiptLoading(false); });
+      .select('*')
+      .eq('id', tx.receipt_id);
+    if (tx.organization_id) query = query.eq('organization_id', tx.organization_id);
+    query
+      .maybeSingle()
+      .then(({ data, error }: any) => {
+        if (error) console.error('[receipt fetch]', error);
+        setLinkedReceipt(data ?? null);
+        setReceiptLoading(false);
+      })
+      .catch((err: any) => { console.error('[receipt fetch catch]', err); setLinkedReceipt(null); setReceiptLoading(false); });
   }, [tx.receipt_id]);
 
   const catLabel = categoryOptions.find((c) => c.value === tx.category)?.label || tx.category;
