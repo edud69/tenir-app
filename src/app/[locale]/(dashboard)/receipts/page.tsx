@@ -515,7 +515,12 @@ function DropzoneArea({ orgId, userId, onReceiptCreated }: {
         uploadForm.append('orgId', orgId);
         uploadForm.append('userId', userId);
         const uploadRes = await fetch('/api/receipts/upload', { method: 'POST', body: uploadForm });
-        if (!uploadRes.ok) throw new Error((await uploadRes.json()).error || 'Upload failed');
+        if (!uploadRes.ok) {
+          const text = await uploadRes.text();
+          let msg = 'Upload failed';
+          try { msg = JSON.parse(text).error || msg; } catch { if (text) msg = text; }
+          throw new Error(msg);
+        }
         const { path: filePath } = await uploadRes.json();
 
         setItemStatus(tempId, 'processing');
@@ -573,7 +578,7 @@ function DropzoneArea({ orgId, userId, onReceiptCreated }: {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: { 'application/pdf': ['.pdf'], 'image/jpeg': ['.jpg', '.jpeg'], 'image/png': ['.png'] },
-    maxSize: 10 * 1024 * 1024,
+    maxSize: 4 * 1024 * 1024,
   });
 
   return (
