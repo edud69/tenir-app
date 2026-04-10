@@ -581,15 +581,18 @@ function TransactionDetailModal({
 }) {
   const supabase = createClient();
   const [linkedReceipt, setLinkedReceipt] = useState<ReceiptRecord | null>(null);
+  const [receiptLoading, setReceiptLoading] = useState(!!tx.receipt_id);
 
   useEffect(() => {
-    if (!tx.receipt_id) { setLinkedReceipt(null); return; }
+    if (!tx.receipt_id) { setLinkedReceipt(null); setReceiptLoading(false); return; }
+    setReceiptLoading(true);
     (supabase as any)
       .from('receipts')
       .select('id,file_path,file_name,vendor,amount,date,category,gst_amount,qst_amount,transaction_id')
       .eq('id', tx.receipt_id)
       .single()
-      .then(({ data }: any) => setLinkedReceipt(data ?? null));
+      .then(({ data }: any) => { setLinkedReceipt(data ?? null); setReceiptLoading(false); })
+      .catch(() => { setLinkedReceipt(null); setReceiptLoading(false); });
   }, [tx.receipt_id]);
 
   const catLabel = categoryOptions.find((c) => c.value === tx.category)?.label || tx.category;
@@ -668,7 +671,11 @@ function TransactionDetailModal({
                 <Edit2 size={11} /> Gérer
               </button>
             </div>
-            {linkedReceipt ? (
+            {receiptLoading ? (
+              <div className="px-6 pb-5 flex items-center gap-2 text-sm text-gray-400">
+                <Loader2 size={14} className="animate-spin" /> Chargement…
+              </div>
+            ) : linkedReceipt ? (
               <div className="px-6 pb-5 space-y-3">
                 <ReceiptImagePreview filePath={linkedReceipt.file_path} fileName={linkedReceipt.file_name} />
                 <div className="grid grid-cols-2 gap-x-5 gap-y-2.5">
@@ -705,9 +712,7 @@ function TransactionDetailModal({
                 </div>
               </div>
             ) : (
-              <div className="px-6 pb-5 flex items-center gap-2 text-sm text-gray-400">
-                <Loader2 size={14} className="animate-spin" /> Chargement…
-              </div>
+              <div className="px-6 pb-5 text-sm text-gray-400">Reçu introuvable.</div>
             )}
           </div>
         )}
