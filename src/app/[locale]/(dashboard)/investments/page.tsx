@@ -414,9 +414,16 @@ function ImportInvestmentsModal({ isOpen, onClose, onImport }: {
       const fd = new FormData();
       fd.append('file', file);
       const res = await fetch('/api/investments/import', { method: 'POST', body: fd });
-      const data = await res.json();
+      const text = await res.text();
+      let data: any;
+      try { data = JSON.parse(text); } catch { throw new Error(text || 'Import failed'); }
       if (!res.ok) throw new Error(data.error || 'Import failed');
-      setRows((data.investments as ImportedInvestment[]).map((inv) => ({ ...inv, selected: true })));
+      setRows((data.investments as ImportedInvestment[]).map((inv) => ({
+        ...inv,
+        shares: Number(inv.shares) || 0,
+        purchase_price: Number(inv.purchase_price) || 0,
+        selected: true,
+      })));
       setPhase('preview');
     } catch (e: any) {
       setErrMsg(e.message || 'Erreur');
@@ -568,8 +575,8 @@ function ImportInvestmentsModal({ isOpen, onClose, onImport }: {
                             {TYPE_OPTIONS.find((t) => t.value === row.type)?.label ?? row.type}
                           </span>
                         </td>
-                        <td className="px-3 py-2.5 text-right font-mono text-xs text-gray-800">{row.shares.toLocaleString('fr-CA', { maximumFractionDigits: 4 })}</td>
-                        <td className="px-3 py-2.5 text-right font-mono text-xs text-gray-800">{formatCurrency(row.purchase_price)}</td>
+                        <td className="px-3 py-2.5 text-right font-mono text-xs text-gray-800">{(row.shares ?? 0).toLocaleString('fr-CA', { maximumFractionDigits: 4 })}</td>
+                        <td className="px-3 py-2.5 text-right font-mono text-xs text-gray-800">{formatCurrency(row.purchase_price ?? 0)}</td>
                         <td className="px-3 py-2.5 text-xs text-gray-500">{row.purchase_date ?? '—'}</td>
                         <td className="px-3 py-2.5 text-xs text-gray-500">
                           {row.currency}
