@@ -44,7 +44,8 @@
     "settings": "Paramètres",
     "help": "Aide",
     "logout": "Déconnexion",
-    "assistant": "Assistant IA"
+    "assistant": "Assistant IA",
+    "fiscalAdvisor": "Conseiller Fiscal IA"
   },
   "auth": {
     "login": "Se connecter",
@@ -282,6 +283,45 @@
     },
     "thinking": "Réflexion en cours...",
     "disclaimer": "L'assistant IA fournit des informations générales. Consultez un CPA pour des conseils personnalisés."
+  },
+  "fiscalAdvisor": {
+    "buttonLabel": "Conseiller Fiscal IA",
+    "panelTitle": "Analyse Fiscale IA",
+    "beta": "BETA",
+    "description": "Analyse approfondie de votre dossier fiscal complet basée sur vos données financières réelles : profils fiscaux, transactions, placements et déclarations.",
+    "launchAnalysis": "Lancer l'analyse",
+    "newAnalysis": "Nouvelle analyse",
+    "exportPdf": "Exporter PDF",
+    "analyzing": "Analyse en cours...",
+    "streamingLabel": "Génération des recommandations...",
+    "featureList": {
+      "immediate": "Recommandations fiscales immédiates et prioritaires",
+      "strategy": "Stratégie d'optimisation fiscale à long terme",
+      "risks": "Identification et mitigation des risques fiscaux"
+    },
+    "steps": {
+      "collecting": "Collecte des données financières...",
+      "analyzing": "Analyse de la structure fiscale...",
+      "generating": "Génération des recommandations..."
+    },
+    "sections": {
+      "summary": "Résumé de la situation",
+      "immediate": "Recommandations immédiates",
+      "longterm": "Stratégie long terme",
+      "risks": "Risques identifiés"
+    },
+    "priority": {
+      "critical": "Critique",
+      "high": "Priorité",
+      "medium": "Moyen"
+    },
+    "deadline": "Échéance",
+    "references": "Références",
+    "prerequisites": "Prérequis",
+    "mitigation": "Mitigation",
+    "retry": "Réessayer",
+    "error": "Une erreur est survenue lors de l'analyse. Veuillez réessayer.",
+    "disclaimer": "Cette analyse est générée par IA à partir de vos données. Consultez un CPA pour des conseils professionnels personnalisés."
   },
   "settings": {
     "title": "Paramètres",

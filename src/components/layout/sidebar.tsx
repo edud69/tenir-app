@@ -14,6 +14,7 @@ import {
   CreditCard,
   Settings,
   Bot,
+  Sparkles,
   X,
   LogOut,
   Globe,
@@ -21,6 +22,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/ui/logo';
+import { FiscalAdvisorPanel } from '@/components/assistant/fiscal-advisor-panel';
 
 interface NavItem {
   href: string;
@@ -43,6 +45,7 @@ export default function Sidebar({ user, locale }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isFiscalPanelOpen, setIsFiscalPanelOpen] = useState(false);
 
   const navItems: NavItem[] = [
     { href: `/${locale}/dashboard`,   icon: LayoutDashboard, label: t('dashboard'),   key: 'dashboard' },
@@ -120,6 +123,21 @@ export default function Sidebar({ user, locale }: SidebarProps) {
               </Link>
             );
           })}
+        </div>
+
+        {/* Fiscal Advisor — between Forms and Settings */}
+        <div className="mt-3">
+          <button
+            onClick={() => { setIsFiscalPanelOpen(true); setIsMobileOpen(false); }}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-gradient-to-r from-tenir-500/20 to-accent-500/20 border border-tenir-500/30 text-slate-300 hover:from-tenir-500/30 hover:to-accent-500/30 hover:text-white transition-all duration-150 text-sm font-medium relative"
+            aria-label={t('fiscalAdvisor')}
+          >
+            <Sparkles size={18} className="flex-shrink-0 text-tenir-400" />
+            <span className="flex-1 text-left">{t('fiscalAdvisor')}</span>
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-tenir-500/30 text-tenir-300 tracking-widest uppercase">
+              BETA
+            </span>
+          </button>
         </div>
 
         {/* Settings — separated */}
@@ -221,6 +239,13 @@ export default function Sidebar({ user, locale }: SidebarProps) {
           </aside>
         </>
       )}
+
+      {/* Fiscal Advisor Panel */}
+      <FiscalAdvisorPanel
+        isOpen={isFiscalPanelOpen}
+        onClose={() => setIsFiscalPanelOpen(false)}
+        locale={locale}
+      />
     </>
   );
 }
