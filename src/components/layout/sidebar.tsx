@@ -13,11 +13,9 @@ import {
   FileText,
   CreditCard,
   Settings,
-  Bot,
   X,
   LogOut,
   Globe,
-  ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/ui/logo';
@@ -146,14 +144,6 @@ export default function Sidebar({ user, locale }: SidebarProps) {
           </Link>
         </div>
 
-        {/* AI Assistant */}
-        <div className="mt-4">
-          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-gradient-to-r from-accent-600 to-accent-500 text-white hover:from-accent-500 hover:to-accent-400 transition-all duration-150 font-medium text-sm shadow-lg shadow-accent-900/30">
-            <Bot size={18} className="flex-shrink-0" />
-            <span className="flex-1 text-left">{t('assistant')}</span>
-            <ChevronRight size={14} className="opacity-60" />
-          </button>
-        </div>
       </nav>
 
       {/* Bottom section */}
