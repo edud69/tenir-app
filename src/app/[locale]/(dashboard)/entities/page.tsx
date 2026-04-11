@@ -246,10 +246,8 @@ interface EntityGraphProps {
   onSelectEntity: (id: string | null) => void;
 }
 
-function EntityGraph({ entities, relations, flows, selectedEntityId, onSelectEntity }: EntityGraphProps) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
+// Inner component — only rendered after mount, so ReactFlow hooks never run on server
+function EntityGraphCanvas({ entities, relations, flows, selectedEntityId, onSelectEntity }: EntityGraphProps) {
   const centerX = 250;
   const centerY = 200;
   const levelGap = 160;
@@ -268,64 +266,53 @@ function EntityGraph({ entities, relations, flows, selectedEntityId, onSelectEnt
   const children = others.filter((e) => childIds.has(e.id));
   const unconnected = others.filter((e) => !parentIds.has(e.id) && !childIds.has(e.id));
 
-  const buildNodes = (): Node[] => {
+  const buildNodes = useCallback((): Node[] => {
     const result: Node[] = [];
-
     const parentGap = 200;
     const parentStartX = centerX - ((parents.length - 1) * parentGap) / 2;
     parents.forEach((e, i) => {
       result.push({
-        id: e.id,
-        type: 'entityNode',
+        id: e.id, type: 'entityNode',
         position: { x: parentStartX + i * parentGap, y: centerY - levelGap },
         data: { label: e.name, entityType: e.entity_type, corpType: e.corporation_type, isCurrentOrg: false, isSelected: selectedEntityId === e.id },
         selected: selectedEntityId === e.id,
       });
     });
-
     if (currentOrg) {
       result.push({
-        id: currentOrg.id,
-        type: 'entityNode',
+        id: currentOrg.id, type: 'entityNode',
         position: { x: centerX, y: centerY },
         data: { label: currentOrg.name, entityType: currentOrg.entity_type, corpType: currentOrg.corporation_type, isCurrentOrg: true, isSelected: selectedEntityId === currentOrg.id },
         selected: selectedEntityId === currentOrg.id,
       });
     }
-
     const childGap = 180;
     const childStartX = centerX - ((children.length - 1) * childGap) / 2;
     children.forEach((e, i) => {
       result.push({
-        id: e.id,
-        type: 'entityNode',
+        id: e.id, type: 'entityNode',
         position: { x: childStartX + i * childGap, y: centerY + levelGap },
         data: { label: e.name, entityType: e.entity_type, corpType: e.corporation_type, isCurrentOrg: false, isSelected: selectedEntityId === e.id },
         selected: selectedEntityId === e.id,
       });
     });
-
     unconnected.forEach((e, i) => {
       result.push({
-        id: e.id,
-        type: 'entityNode',
+        id: e.id, type: 'entityNode',
         position: { x: centerX + 350, y: 80 + i * 130 },
         data: { label: e.name, entityType: e.entity_type, corpType: e.corporation_type, isCurrentOrg: false, isSelected: selectedEntityId === e.id },
         selected: selectedEntityId === e.id,
       });
     });
-
     return result;
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entities, relations, selectedEntityId]);
 
-  const buildEdges = (): Edge[] => {
+  const buildEdges = useCallback((): Edge[] => {
     const result: Edge[] = [];
-
     relations.forEach((r) => {
       result.push({
-        id: `rel-${r.id}`,
-        source: r.parent_entity_id,
-        target: r.child_entity_id,
+        id: `rel-${r.id}`, source: r.parent_entity_id, target: r.child_entity_id,
         label: `${r.ownership_percentage}%${r.share_class ? ` Cat. ${r.share_class}` : ''}`,
         labelStyle: { fontSize: 10, fontWeight: 600 },
         labelBgStyle: { fill: '#eef2ff', stroke: '#c7d2fe' },
@@ -335,22 +322,15 @@ function EntityGraph({ entities, relations, flows, selectedEntityId, onSelectEnt
         type: 'smoothstep',
       });
     });
-
-    // Deduplicate flows by from-to pair, show latest
     const flowMap = new Map<string, FinancialFlow>();
     flows.forEach((f) => {
       const key = `${f.from_entity_id}-${f.to_entity_id}`;
       const existing = flowMap.get(key);
-      if (!existing || new Date(f.date) > new Date(existing.date)) {
-        flowMap.set(key, f);
-      }
+      if (!existing || new Date(f.date) > new Date(existing.date)) flowMap.set(key, f);
     });
-
     flowMap.forEach((flow) => {
       result.push({
-        id: `flow-${flow.id}`,
-        source: flow.from_entity_id,
-        target: flow.to_entity_id,
+        id: `flow-${flow.id}`, source: flow.from_entity_id, target: flow.to_entity_id,
         label: formatCurrency(flow.amount),
         labelStyle: { fontSize: 10, fontWeight: 600 },
         labelBgStyle: { fill: '#ecfdf5', stroke: '#a7f3d0' },
@@ -360,32 +340,15 @@ function EntityGraph({ entities, relations, flows, selectedEntityId, onSelectEnt
         type: 'smoothstep',
       });
     });
-
     return result;
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [relations, flows]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(buildNodes());
   const [edges, , onEdgesChange] = useEdgesState(buildEdges());
 
-  // Sync nodes when data changes
-  useEffect(() => {
-    setNodes(buildNodes());
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entities, relations, flows, selectedEntityId]);
-
-  if (entities.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 text-gray-400">
-        <GitBranch size={40} className="mb-3 opacity-30" />
-        <p className="text-sm">Aucune entité à afficher</p>
-        <p className="text-xs mt-1 opacity-70">Ajoutez une entité pour visualiser la structure</p>
-      </div>
-    );
-  }
-
-  if (!mounted) {
-    return <div style={{ height: 420 }} className="rounded-xl overflow-hidden border border-gray-100 bg-gray-50 animate-pulse" />;
-  }
+  useEffect(() => { setNodes(buildNodes()); }, [buildNodes, setNodes]);
+  useEffect(() => { /* edges rarely change, rebuild on flow change */ }, [buildEdges]);
 
   return (
     <div style={{ height: 420 }} className="rounded-xl overflow-hidden border border-gray-100">
@@ -416,6 +379,35 @@ function EntityGraph({ entities, relations, flows, selectedEntityId, onSelectEnt
         />
       </ReactFlow>
     </div>
+  );
+}
+
+function EntityGraph({ entities, relations, flows, selectedEntityId, onSelectEntity }: EntityGraphProps) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  if (entities.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+        <GitBranch size={40} className="mb-3 opacity-30" />
+        <p className="text-sm">Aucune entité à afficher</p>
+        <p className="text-xs mt-1 opacity-70">Ajoutez une entité pour visualiser la structure</p>
+      </div>
+    );
+  }
+
+  if (!mounted) {
+    return <div style={{ height: 420 }} className="rounded-xl overflow-hidden border border-gray-100 bg-gray-50 animate-pulse" />;
+  }
+
+  return (
+    <EntityGraphCanvas
+      entities={entities}
+      relations={relations}
+      flows={flows}
+      selectedEntityId={selectedEntityId}
+      onSelectEntity={onSelectEntity}
+    />
   );
 }
 
