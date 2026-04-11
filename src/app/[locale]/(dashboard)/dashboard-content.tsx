@@ -1,10 +1,15 @@
 'use client';
 
 import React, { ReactNode, useState } from 'react';
+import dynamic from 'next/dynamic';
 import Sidebar from '@/components/layout/sidebar';
 import { ChatWidget } from '@/components/assistant/chat-widget';
-import { FiscalAdvisorPanel } from '@/components/assistant/fiscal-advisor-panel';
 import { Sparkles } from 'lucide-react';
+
+const FiscalAdvisorPanel = dynamic(
+  () => import('@/components/assistant/fiscal-advisor-panel').then((m) => ({ default: m.FiscalAdvisorPanel })),
+  { ssr: false }
+);
 
 interface DashboardContentProps {
   children: ReactNode;
