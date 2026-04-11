@@ -150,7 +150,7 @@ export async function POST(req: NextRequest) {
         is_open_balance: is_open_balance ?? false,
         outstanding_balance: outstanding_balance ?? null,
         interest_rate: interest_rate ?? null,
-        due_date: due_date ?? null,
+        due_date: due_date || null,
         rdtoh_refund_eligible: computedRdtoh,
         grip_impact: grip_impact ?? null,
         status: status ?? 'recorded',

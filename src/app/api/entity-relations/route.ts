@@ -94,8 +94,8 @@ export async function POST(req: NextRequest) {
         num_shares: num_shares ?? null,
         share_value: share_value ?? null,
         effective_date,
-        end_date: end_date ?? null,
-        notes: notes ?? null,
+        end_date: end_date || null,
+        notes: notes || null,
       })
       .select()
       .single();
