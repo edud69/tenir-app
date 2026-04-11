@@ -191,6 +191,68 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['ai_conversations']['Row'], 'id' | 'created_at' | 'updated_at'>;
         Update: Partial<Database['public']['Tables']['ai_conversations']['Insert']>;
       };
+      home_offices: {
+        Row: {
+          id: string;
+          organization_id: string;
+          label: string;
+          office_type: 'registered_office' | 'secondary_establishment' | 'both';
+          address: string;
+          city: string;
+          province: string;
+          postal_code: string | null;
+          tenure_type: 'tenant' | 'owner';
+          total_area_sqft: number;
+          office_area_sqft: number;
+          start_date: string;
+          end_date: string | null;
+          months_used_per_year: number;
+          is_active: boolean;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['home_offices']['Row'], 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Database['public']['Tables']['home_offices']['Insert']>;
+      };
+      home_office_expenses: {
+        Row: {
+          id: string;
+          home_office_id: string;
+          organization_id: string;
+          expense_type: 'rent' | 'mortgage_interest' | 'municipal_taxes' | 'school_taxes' | 'electricity' | 'gas' | 'home_insurance' | 'maintenance' | 'other';
+          amount: number;
+          currency: string;
+          period_start: string;
+          period_end: string;
+          document_id: string | null;
+          linked_transaction_id: string | null;
+          description: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['home_office_expenses']['Row'], 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Database['public']['Tables']['home_office_expenses']['Insert']>;
+      };
+      home_office_documents: {
+        Row: {
+          id: string;
+          home_office_id: string;
+          organization_id: string;
+          document_type: 'mortgage_statement' | 'lease_agreement' | 'sublease_agreement' | 'municipal_tax_bill' | 'school_tax_bill' | 'electricity_bill' | 'gas_bill' | 'insurance_policy' | 'floor_plan' | 'other';
+          file_path: string;
+          file_name: string;
+          file_size: number | null;
+          period_start: string | null;
+          period_end: string | null;
+          amount: number | null;
+          description: string | null;
+          uploaded_by: string;
+          created_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['home_office_documents']['Row'], 'id' | 'created_at'>;
+        Update: Partial<Database['public']['Tables']['home_office_documents']['Insert']>;
+      };
     };
     Views: {};
     Functions: {};

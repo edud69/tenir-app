@@ -38,6 +38,7 @@
     "receipts": "Reçus",
     "expenses": "Dépenses",
     "investments": "Placements",
+    "homeOffice": "Siège social",
     "taxes": "Impôts",
     "taxPayments": "Paiements d'impôts",
     "forms": "Formulaires",
@@ -315,5 +316,70 @@
     "french": "Français",
     "saveChanges": "Enregistrer les modifications",
     "changeSaved": "Modifications enregistrées avec succès"
+  },
+  "homeOffice": {
+    "title": "Siège social & Bureau à domicile",
+    "subtitle": "Déduisez la partie des frais de domicile utilisée pour vos affaires corporatives",
+    "addLocation": "Ajouter un lieu",
+    "noLocations": "Aucun lieu d'affaires configuré",
+    "noLocationsDesc": "Ajoutez votre domicile comme siège social ou lieu d'établissement secondaire pour calculer la déduction admissible.",
+    "annualDeduction": "Déduction annuelle",
+    "monthlyReimbursement": "Remboursement mensuel",
+    "usageRatio": "Taux d'utilisation",
+    "officeType": {
+      "registered_office": "Siège social",
+      "secondary_establishment": "Lieu d'établissement secondaire",
+      "both": "Siège social + Établissement secondaire"
+    },
+    "tenureType": {
+      "tenant": "Locataire",
+      "owner": "Propriétaire"
+    },
+    "expenseTypes": {
+      "rent": "Loyer",
+      "mortgage_interest": "Intérêts hypothécaires",
+      "municipal_taxes": "Taxes municipales",
+      "school_taxes": "Taxes scolaires",
+      "electricity": "Électricité",
+      "gas": "Gaz / Chauffage",
+      "home_insurance": "Assurance habitation",
+      "maintenance": "Entretien commun",
+      "other": "Autre"
+    },
+    "documentTypes": {
+      "mortgage_statement": "Relevé hypothécaire",
+      "lease_agreement": "Bail",
+      "sublease_agreement": "Contrat de sous-location",
+      "municipal_tax_bill": "Compte de taxes municipales",
+      "school_tax_bill": "Compte de taxes scolaires",
+      "electricity_bill": "Facture d'électricité",
+      "gas_bill": "Facture de gaz",
+      "insurance_policy": "Police d'assurance",
+      "floor_plan": "Plan du domicile",
+      "other": "Autre document"
+    },
+    "fiscalWarning": "Ces montants sont des estimations basées sur vos données. Un contrat de sous-location entre la société et l'actionnaire est obligatoire. Consultez votre comptable pour valider les montants avant tout versement.",
+    "highRatioWarning": "Un taux d'utilisation supérieur à 40 % peut être remis en question par l'ARC ou Revenu Québec. Assurez-vous que la superficie déclarée est justifiée.",
+    "calculationExplainer": "La déduction = total des dépenses admissibles × superficie bureau / superficie totale",
+    "addExpense": "Ajouter une dépense",
+    "viewProofs": "Preuves",
+    "viewDetails": "Voir le calcul",
+    "editLocation": "Modifier le lieu",
+    "deleteLocation": "Supprimer",
+    "active": "Actif",
+    "inactive": "Inactif",
+    "sqft": "pi²",
+    "totalAreaSqft": "Superficie totale du domicile",
+    "officeAreaSqft": "Superficie du bureau",
+    "startDate": "Date de début",
+    "monthsPerYear": "Mois d'utilisation par année",
+    "subleaseTip": "💡 N'oubliez pas de signer un contrat de sous-location entre la société et vous-même (en tant qu'actionnaire).",
+    "copyForAccountant": "Copier le résumé pour mon comptable",
+    "proofUploaded": "Preuve ajoutée",
+    "noProofs": "Aucune preuve ajoutée",
+    "label": "Nom du lieu",
+    "address": "Adresse",
+    "city": "Ville",
+    "postalCode": "Code postal"
   }
 }

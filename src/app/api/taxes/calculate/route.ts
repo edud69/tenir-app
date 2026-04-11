@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { annualizeExpense } from '@/types/home-office';
 
 // 2024-2025 Canadian and Quebec tax rates
 const TAX_RATES = {
@@ -80,6 +81,36 @@ export async function POST(request: Request) {
       activeBusinessIncome = profile?.active_business_income ?? 250000;
       investmentIncome = profile?.aggregate_investment_income ?? 0;
     }
+
+    // Home office deduction (corporate deduction, reduces active business income)
+    let homeOfficeDeduction = 0;
+    const { data: homeOffices } = await (supabase as any)
+      .from('home_offices')
+      .select('id, total_area_sqft, office_area_sqft, months_used_per_year')
+      .eq('organization_id', orgId)
+      .eq('is_active', true);
+
+    if (homeOffices && homeOffices.length > 0) {
+      for (const office of homeOffices) {
+        const { data: officeExpenses } = await (supabase as any)
+          .from('home_office_expenses')
+          .select('amount, period_start, period_end')
+          .eq('home_office_id', office.id);
+
+        const annualTotal = (officeExpenses ?? []).reduce(
+          (sum: number, exp: { amount: number; period_start: string; period_end: string }) => {
+            return sum + annualizeExpense(Number(exp.amount), new Date(exp.period_start), new Date(exp.period_end));
+          },
+          0
+        );
+
+        const usageRatio = Number(office.office_area_sqft) / Number(office.total_area_sqft);
+        const monthsRatio = Number(office.months_used_per_year) / 12;
+        homeOfficeDeduction += annualTotal * usageRatio * monthsRatio;
+      }
+    }
+
+    activeBusinessIncome = Math.max(0, activeBusinessIncome - homeOfficeDeduction);
 
     const corporationType = profile?.corporation_type ?? 'ccpc';
     const smallBusinessLimit = profile?.small_business_limit ?? TAX_RATES.federal.smallBusinessLimit;
@@ -180,6 +211,7 @@ export async function POST(request: Request) {
         corporation_type: corporationType,
         active_business_income: Math.round(activeBusinessIncome * 100) / 100,
         aggregate_investment_income: Math.round(investmentIncome * 100) / 100,
+        home_office_deduction: Math.round(homeOfficeDeduction * 100) / 100,
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
