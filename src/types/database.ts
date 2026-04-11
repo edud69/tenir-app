@@ -55,12 +55,33 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['receipts']['Row'], 'id' | 'created_at' | 'updated_at'>;
         Update: Partial<Database['public']['Tables']['receipts']['Insert']>;
       };
+      bank_accounts: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          type: 'checking' | 'savings' | 'credit_card' | 'line_of_credit';
+          institution: string | null;
+          last_four: string | null;
+          currency: string;
+          current_balance: number;
+          credit_limit: number | null;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['bank_accounts']['Row'], 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Database['public']['Tables']['bank_accounts']['Insert']>;
+      };
       transactions: {
         Row: {
           id: string;
           organization_id: string;
           receipt_id: string | null;
-          type: 'expense' | 'income' | 'dividend' | 'capital_gain' | 'interest';
+          account_id: string | null;
+          linked_transaction_id: string | null;
+          transfer_type: 'credit_card_payment' | 'account_advance' | 'transfer' | null;
+          type: 'expense' | 'income' | 'dividend' | 'capital_gain' | 'interest' | 'transfer';
           amount: number;
           currency: string;
           date: string;

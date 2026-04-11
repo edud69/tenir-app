@@ -12,11 +12,17 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
 import { Table, TableBody, TableHead, TableHeader, TableRow, TableCell } from '@/components/ui/table';
-import { Plus, Edit2, Trash2, ArrowUpRight, ArrowDownLeft, Paperclip, Upload, Link2, Unlink, FileText, ImageOff, Loader2, CheckCircle, X } from 'lucide-react';
+import {
+  Plus, Edit2, Trash2, ArrowUpRight, ArrowDownLeft, Paperclip, Upload,
+  Link2, Unlink, FileText, ImageOff, Loader2, CheckCircle, X,
+  CreditCard, Landmark, ArrowLeftRight, PiggyBank, Banknote,
+} from 'lucide-react';
 import { useOrganization } from '@/hooks/useOrganization';
 import { createClient } from '@/lib/supabase/client';
 
-type TransactionType = 'expense' | 'income' | 'dividend' | 'capital_gain' | 'interest';
+type TransactionType = 'expense' | 'income' | 'dividend' | 'capital_gain' | 'interest' | 'transfer';
+type AccountType = 'checking' | 'savings' | 'credit_card' | 'line_of_credit';
+type TransferType = 'credit_card_payment' | 'account_advance' | 'transfer';
 
 // ─── OCR helpers ──────────────────────────────────────────────────────────────
 
@@ -36,7 +42,7 @@ function normalizeOcrCategory(raw: string | null): string {
   return 'other';
 }
 
-// ─── Receipt modal for linking/uploading ─────────────────────────────────────
+// ─── Receipt modal ────────────────────────────────────────────────────────────
 
 interface ReceiptRecord {
   id: string;
@@ -71,11 +77,7 @@ type ReceiptTab = 'link' | 'upload';
 type UploadPhase = 'idle' | 'uploading' | 'scanning' | 'saving' | 'done' | 'error';
 
 function TransactionReceiptModal({
-  tx,
-  orgId,
-  userId,
-  onClose,
-  onLinked,
+  tx, orgId, userId, onClose, onLinked,
 }: {
   tx: Transaction;
   orgId: string;
@@ -85,14 +87,13 @@ function TransactionReceiptModal({
 }) {
   const supabase = createClient();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [tab, setTab] = useState<ReceiptTab>(tx.receipt_id ? 'link' : 'link');
+  const [tab, setTab] = useState<ReceiptTab>('link');
   const [receipts, setReceipts] = useState<ReceiptRecord[]>([]);
   const [loadingReceipts, setLoadingReceipts] = useState(false);
   const [phase, setPhase] = useState<UploadPhase>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const [doneLabel, setDoneLabel] = useState('');
 
-  // Load unlinked receipts
   useEffect(() => {
     async function load() {
       setLoadingReceipts(true);
@@ -109,7 +110,6 @@ function TransactionReceiptModal({
   }, [tab, orgId]);
 
   async function handleLink(receipt: ReceiptRecord) {
-    // If tx already had a receipt, unlink it first
     if (tx.receipt_id) {
       await (supabase as any).from('receipts').update({ transaction_id: null }).eq('id', tx.receipt_id);
     }
@@ -131,9 +131,7 @@ function TransactionReceiptModal({
     const file = e.target.files?.[0];
     if (!file) return;
     setErrorMsg('');
-
     try {
-      // 1. Upload to storage
       setPhase('uploading');
       const uploadForm = new FormData();
       uploadForm.append('file', file);
@@ -143,7 +141,6 @@ function TransactionReceiptModal({
       if (!uploadRes.ok) throw new Error('Upload failed');
       const { path: filePath } = await uploadRes.json();
 
-      // 2. OCR scan
       setPhase('scanning');
       const ocrForm = new FormData();
       ocrForm.append('file', file);
@@ -155,7 +152,6 @@ function TransactionReceiptModal({
       const date = ocr.date || null;
       const category = normalizeOcrCategory(ocr.category);
 
-      // 3. Create receipt record
       setPhase('saving');
       const { data: receiptRow, error: receiptErr } = await (supabase as any)
         .from('receipts')
@@ -179,7 +175,6 @@ function TransactionReceiptModal({
         .single();
       if (receiptErr) throw new Error(receiptErr.message);
 
-      // 4. Update transaction with OCR data
       const txUpdates: Record<string, any> = { receipt_id: receiptRow.id };
       if (vendor && !tx.vendor) txUpdates.vendor = vendor;
       if (amount !== null && tx.amount === 0) txUpdates.amount = -Math.abs(amount);
@@ -216,7 +211,6 @@ function TransactionReceiptModal({
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
           <div>
             <h2 className="text-base font-semibold text-gray-900">Receipt</h2>
@@ -226,8 +220,6 @@ function TransactionReceiptModal({
             <X size={15} />
           </button>
         </div>
-
-        {/* Tabs */}
         <div className="flex border-b border-gray-100 px-6">
           {(['link', 'upload'] as ReceiptTab[]).map((t) => (
             <button key={t} onClick={() => { setTab(t); setPhase('idle'); setErrorMsg(''); }}
@@ -236,9 +228,7 @@ function TransactionReceiptModal({
             </button>
           ))}
         </div>
-
         <div className="p-6 max-h-[420px] overflow-y-auto">
-          {/* ── Link tab ── */}
           {tab === 'link' && (
             <div>
               {tx.receipt_id && (
@@ -281,8 +271,6 @@ function TransactionReceiptModal({
               )}
             </div>
           )}
-
-          {/* ── Upload tab ── */}
           {tab === 'upload' && (
             <div>
               {phase === 'idle' || phase === 'error' ? (
@@ -298,9 +286,7 @@ function TransactionReceiptModal({
                     </div>
                   </button>
                   <input ref={fileRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={handleFileChange} />
-                  {phase === 'error' && (
-                    <p className="mt-3 text-sm text-red-600 text-center">{errorMsg}</p>
-                  )}
+                  {phase === 'error' && <p className="mt-3 text-sm text-red-600 text-center">{errorMsg}</p>}
                 </div>
               ) : phase === 'done' ? (
                 <div className="flex flex-col items-center gap-3 py-8">
@@ -325,6 +311,123 @@ function TransactionReceiptModal({
   );
 }
 
+// ─── Link Transaction Modal ───────────────────────────────────────────────────
+
+function LinkTransactionModal({
+  tx,
+  allTransactions,
+  onClose,
+  onLinked,
+}: {
+  tx: Transaction;
+  allTransactions: Transaction[];
+  onClose: () => void;
+  onLinked: (txId: string, linkedId: string | null) => void;
+}) {
+  const supabase = createClient();
+  const [search, setSearch] = useState('');
+
+  const candidates = allTransactions.filter(
+    (t) => t.id !== tx.id && !t.linked_transaction_id &&
+      (t.description.toLowerCase().includes(search.toLowerCase()) ||
+       (t.vendor || '').toLowerCase().includes(search.toLowerCase()))
+  );
+
+  async function handleLink(target: Transaction) {
+    await (supabase as any).from('transactions').update({ linked_transaction_id: target.id }).eq('id', tx.id);
+    await (supabase as any).from('transactions').update({ linked_transaction_id: tx.id }).eq('id', target.id);
+    onLinked(tx.id, target.id);
+    onClose();
+  }
+
+  async function handleUnlink() {
+    if (tx.linked_transaction_id) {
+      await (supabase as any).from('transactions').update({ linked_transaction_id: null }).eq('id', tx.linked_transaction_id);
+    }
+    await (supabase as any).from('transactions').update({ linked_transaction_id: null }).eq('id', tx.id);
+    onLinked(tx.id, null);
+    onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">Lier une transaction</h2>
+            <p className="text-xs text-gray-400 mt-0.5 truncate max-w-xs">{tx.description}</p>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-700 transition-colors">
+            <X size={15} />
+          </button>
+        </div>
+
+        <div className="px-6 pt-4 pb-2">
+          {tx.linked_transaction_id && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-100 rounded-xl flex items-center justify-between">
+              <span className="text-sm text-blue-700 font-medium flex items-center gap-2">
+                <Link2 size={14} /> Transaction déjà liée
+              </span>
+              <button onClick={handleUnlink} className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1 font-medium">
+                <Unlink size={11} /> Délier
+              </button>
+            </div>
+          )}
+          <input
+            type="text"
+            placeholder="Rechercher une transaction…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-tenir-400 focus:border-transparent"
+          />
+        </div>
+
+        <div className="p-6 pt-3 max-h-[380px] overflow-y-auto space-y-2">
+          {candidates.length === 0 ? (
+            <div className="text-center py-8">
+              <Link2 size={28} className="text-gray-200 mx-auto mb-3" />
+              <p className="text-sm text-gray-500">Aucune transaction disponible.</p>
+            </div>
+          ) : (
+            candidates.map((t) => (
+              <button key={t.id} onClick={() => handleLink(t)}
+                className="w-full flex items-center gap-3 p-3 rounded-xl border border-gray-100 hover:border-tenir-200 hover:bg-tenir-50/30 transition-all text-left group">
+                <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0', t.amount < 0 ? 'bg-red-50' : 'bg-emerald-50')}>
+                  {t.amount < 0 ? <ArrowDownLeft size={14} className="text-red-500" /> : <ArrowUpRight size={14} className="text-emerald-500" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-900 truncate">{t.description}</p>
+                  <p className="text-xs text-gray-400">{formatDate(t.date)} · {t.category}</p>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className={cn('text-sm font-bold', t.amount < 0 ? 'text-red-600' : 'text-emerald-600')}>{formatCurrency(t.amount)}</p>
+                  <span className="text-xs text-tenir-500 font-medium opacity-0 group-hover:opacity-100 transition-opacity">Lier →</span>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Types & Interfaces ───────────────────────────────────────────────────────
+
+interface BankAccount {
+  id: string;
+  organization_id: string;
+  name: string;
+  type: AccountType;
+  institution: string | null;
+  last_four: string | null;
+  currency: string;
+  current_balance: number;
+  credit_limit: number | null;
+  is_active: boolean;
+  created_at: string;
+}
+
 interface Transaction {
   id: string;
   date: string;
@@ -338,32 +441,167 @@ interface Transaction {
   organization_id?: string;
   created_by?: string;
   receipt_id?: string | null;
+  account_id?: string | null;
+  linked_transaction_id?: string | null;
+  transfer_type?: TransferType | null;
 }
 
 const categoryOptions = [
-  { value: 'office', label: 'Office' },
-  { value: 'professional', label: 'Professional services' },
-  { value: 'insurance', label: 'Insurance' },
-  { value: 'travel', label: 'Travel' },
-  { value: 'meals', label: 'Meals & entertainment' },
-  { value: 'supplies', label: 'Supplies' },
-  { value: 'technology', label: 'Technology' },
-  { value: 'bank', label: 'Bank fees' },
-  { value: 'legal', label: 'Legal fees' },
-  { value: 'accounting', label: 'Accounting fees' },
-  { value: 'dividend', label: 'Dividend' },
-  { value: 'capital_gain', label: 'Capital gain' },
-  { value: 'interest', label: 'Interest' },
-  { value: 'other', label: 'Other' },
+  { value: 'office', label: 'Bureau' },
+  { value: 'professional', label: 'Services professionnels' },
+  { value: 'insurance', label: 'Assurance' },
+  { value: 'travel', label: 'Déplacements' },
+  { value: 'meals', label: 'Repas et divertissement' },
+  { value: 'supplies', label: 'Fournitures' },
+  { value: 'technology', label: 'Technologie' },
+  { value: 'bank', label: 'Frais bancaires' },
+  { value: 'legal', label: 'Frais juridiques' },
+  { value: 'accounting', label: 'Frais comptables' },
+  { value: 'dividend', label: 'Dividende' },
+  { value: 'capital_gain', label: 'Gain en capital' },
+  { value: 'interest', label: 'Intérêt' },
+  { value: 'other', label: 'Autre' },
 ];
 
-const typeOptions = [
-  { value: 'expense', label: 'Expense' },
-  { value: 'income', label: 'Income' },
-  { value: 'dividend', label: 'Dividend' },
-  { value: 'capital_gain', label: 'Capital gain' },
-  { value: 'interest', label: 'Interest' },
-];
+// ─── Account Icon ─────────────────────────────────────────────────────────────
+
+function AccountIcon({ type, size = 16, className }: { type: AccountType; size?: number; className?: string }) {
+  const iconMap: Record<AccountType, React.ElementType> = {
+    checking: Landmark,
+    savings: PiggyBank,
+    credit_card: CreditCard,
+    line_of_credit: Banknote,
+  };
+  const Icon = iconMap[type] || Landmark;
+  return <Icon size={size} className={className} />;
+}
+
+// ─── Account Modal ────────────────────────────────────────────────────────────
+
+interface AccountFormData {
+  name: string;
+  type: AccountType;
+  institution: string;
+  last_four: string;
+  current_balance: number;
+  credit_limit: number;
+}
+
+function AccountModal({
+  isOpen, onClose, onSubmit, initialData,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (data: AccountFormData) => void;
+  initialData?: BankAccount;
+}) {
+  const t = useTranslations('expenses');
+  const commonT = useTranslations('common');
+  const [formData, setFormData] = useState<AccountFormData>(
+    initialData ? {
+      name: initialData.name,
+      type: initialData.type,
+      institution: initialData.institution || '',
+      last_four: initialData.last_four || '',
+      current_balance: initialData.current_balance,
+      credit_limit: initialData.credit_limit || 0,
+    } : {
+      name: '',
+      type: 'checking',
+      institution: '',
+      last_four: '',
+      current_balance: 0,
+      credit_limit: 0,
+    }
+  );
+
+  useEffect(() => {
+    if (initialData) {
+      setFormData({
+        name: initialData.name,
+        type: initialData.type,
+        institution: initialData.institution || '',
+        last_four: initialData.last_four || '',
+        current_balance: initialData.current_balance,
+        credit_limit: initialData.credit_limit || 0,
+      });
+    }
+  }, [initialData]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit(formData);
+  };
+
+  const accountTypeOptions = [
+    { value: 'checking', label: t('checking') },
+    { value: 'savings', label: t('savings') },
+    { value: 'credit_card', label: t('creditCard') },
+    { value: 'line_of_credit', label: t('lineOfCredit') },
+  ];
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={initialData ? t('editAccount') : t('addAccount')}
+      footer={
+        <div className="flex gap-3">
+          <Button variant="ghost" fullWidth onClick={onClose}>{commonT('cancel')}</Button>
+          <Button variant="primary" fullWidth onClick={handleSubmit}>{commonT('save')}</Button>
+        </div>
+      }
+    >
+      <form className="space-y-4" onSubmit={handleSubmit}>
+        <Input
+          label="Nom du compte"
+          value={formData.name}
+          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+          required
+        />
+        <Select
+          label={t('accountType')}
+          value={formData.type}
+          onChange={(value) => setFormData({ ...formData, type: value as AccountType })}
+          options={accountTypeOptions}
+        />
+        <div className="grid grid-cols-2 gap-4">
+          <Input
+            label={t('institution')}
+            value={formData.institution}
+            onChange={(e) => setFormData({ ...formData, institution: e.target.value })}
+            placeholder="ex: TD, Desjardins"
+          />
+          <Input
+            label={t('lastFour')}
+            value={formData.last_four}
+            onChange={(e) => setFormData({ ...formData, last_four: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+            placeholder="1234"
+            maxLength={4}
+          />
+        </div>
+        <Input
+          label={t('balance')}
+          type="number"
+          step="0.01"
+          value={formData.current_balance}
+          onChange={(e) => setFormData({ ...formData, current_balance: parseFloat(e.target.value) || 0 })}
+        />
+        {(formData.type === 'credit_card' || formData.type === 'line_of_credit') && (
+          <Input
+            label={t('creditLimit')}
+            type="number"
+            step="0.01"
+            value={formData.credit_limit}
+            onChange={(e) => setFormData({ ...formData, credit_limit: parseFloat(e.target.value) || 0 })}
+          />
+        )}
+      </form>
+    </Modal>
+  );
+}
+
+// ─── Transaction Modal ────────────────────────────────────────────────────────
 
 interface ModalFormData {
   type: TransactionType;
@@ -374,21 +612,25 @@ interface ModalFormData {
   vendor: string;
   is_recurring: boolean;
   recurrence_frequency: string;
+  account_id: string;
+  transfer_type: TransferType | '';
+  destination_account_id: string;
 }
 
 function TransactionModal({
-  isOpen,
-  onClose,
-  onSubmit,
-  initialData,
+  isOpen, onClose, onSubmit, initialData, bankAccounts,
 }: {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (data: ModalFormData) => void;
   initialData?: Transaction;
+  bankAccounts: BankAccount[];
 }) {
   const t = useTranslations('expenses');
   const commonT = useTranslations('common');
+
+  const defaultAccount = bankAccounts[0]?.id || '';
+
   const [formData, setFormData] = useState<ModalFormData>(
     initialData
       ? {
@@ -400,6 +642,9 @@ function TransactionModal({
           vendor: initialData.vendor || '',
           is_recurring: initialData.is_recurring,
           recurrence_frequency: initialData.recurrence_frequency || '',
+          account_id: initialData.account_id || defaultAccount,
+          transfer_type: (initialData.transfer_type as TransferType) || '',
+          destination_account_id: '',
         }
       : {
           type: 'expense',
@@ -410,8 +655,18 @@ function TransactionModal({
           vendor: '',
           is_recurring: false,
           recurrence_frequency: '',
+          account_id: defaultAccount,
+          transfer_type: '',
+          destination_account_id: '',
         }
   );
+
+  // Reset destination account if same as source
+  useEffect(() => {
+    if (formData.destination_account_id === formData.account_id) {
+      setFormData((prev) => ({ ...prev, destination_account_id: '' }));
+    }
+  }, [formData.account_id]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -419,24 +674,45 @@ function TransactionModal({
     onClose();
   };
 
+  const isTransfer = formData.type === 'transfer';
+  const isIncome = ['income', 'dividend', 'capital_gain', 'interest'].includes(formData.type);
+
+  const typeOptions = [
+    { value: 'expense', label: t('expense') },
+    { value: 'income', label: t('income') },
+    { value: 'dividend', label: t('dividend') },
+    { value: 'capital_gain', label: t('capitalGain') },
+    { value: 'interest', label: t('interest') },
+    { value: 'transfer', label: t('transfer') },
+  ];
+
+  const transferTypeOptions = [
+    { value: 'credit_card_payment', label: t('creditCardPayment') },
+    { value: 'account_advance', label: t('accountAdvance') },
+    { value: 'transfer', label: t('interAccountTransfer') },
+  ];
+
+  const accountOptions = bankAccounts.map((a) => ({
+    value: a.id,
+    label: `${a.name}${a.last_four ? ` ····${a.last_four}` : ''}`,
+  }));
+
+  const destAccountOptions = accountOptions.filter((a) => a.value !== formData.account_id);
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={initialData ? 'Edit Transaction' : t('addTransaction')}
+      title={initialData ? 'Modifier la transaction' : t('addTransaction')}
       size="lg"
       footer={
         <div className="flex gap-3">
-          <Button variant="ghost" fullWidth onClick={onClose}>
-            {commonT('cancel')}
-          </Button>
-          <Button variant="primary" fullWidth onClick={handleSubmit}>
-            {commonT('save')}
-          </Button>
+          <Button variant="ghost" fullWidth onClick={onClose}>{commonT('cancel')}</Button>
+          <Button variant="primary" fullWidth onClick={handleSubmit}>{commonT('save')}</Button>
         </div>
       }
     >
-      <form className="space-y-4">
+      <form className="space-y-4" onSubmit={handleSubmit}>
         <div className="grid grid-cols-2 gap-4">
           <Select
             label={t('type')}
@@ -460,65 +736,96 @@ function TransactionModal({
           required
         />
 
-        <div className="grid grid-cols-2 gap-4">
+        {/* Account selector */}
+        {bankAccounts.length > 0 && (
           <Select
-            label={commonT('category')}
-            value={formData.category}
-            onChange={(value) => setFormData({ ...formData, category: value as string })}
-            options={categoryOptions}
-            required
+            label={isTransfer ? t('sourceAccount') : t('account')}
+            value={formData.account_id}
+            onChange={(value) => setFormData({ ...formData, account_id: String(value) })}
+            options={[{ value: '', label: '— Aucun compte —' }, ...accountOptions]}
           />
+        )}
+
+        {/* Transfer-specific fields */}
+        {isTransfer && (
+          <>
+            <Select
+              label={t('transferType')}
+              value={formData.transfer_type}
+              onChange={(value) => setFormData({ ...formData, transfer_type: value as TransferType })}
+              options={[{ value: '', label: '— Choisir —' }, ...transferTypeOptions]}
+            />
+            {bankAccounts.length > 1 && (
+              <Select
+                label={t('destAccount')}
+                value={formData.destination_account_id}
+                onChange={(value) => setFormData({ ...formData, destination_account_id: String(value) })}
+                options={[{ value: '', label: '— Choisir —' }, ...destAccountOptions]}
+              />
+            )}
+          </>
+        )}
+
+        <div className="grid grid-cols-2 gap-4">
+          {!isTransfer && (
+            <Select
+              label={commonT('category')}
+              value={formData.category}
+              onChange={(value) => setFormData({ ...formData, category: String(value) })}
+              options={categoryOptions}
+            />
+          )}
           <Input
             label={commonT('amount')}
             type="number"
             step="0.01"
             value={Math.abs(formData.amount)}
-            onChange={(e) =>
+            onChange={(e) => {
+              const raw = parseFloat(e.target.value) || 0;
               setFormData({
                 ...formData,
-                amount:
-                  formData.type === 'income' ||
-                  formData.type === 'dividend' ||
-                  formData.type === 'capital_gain' ||
-                  formData.type === 'interest'
-                    ? parseFloat(e.target.value)
-                    : -parseFloat(e.target.value),
-              })
-            }
+                amount: isTransfer || isIncome ? raw : -raw,
+              });
+            }}
             required
           />
         </div>
 
-        <Input
-          label="Vendor / Payer"
-          value={formData.vendor}
-          onChange={(e) => setFormData({ ...formData, vendor: e.target.value })}
-        />
-
-        <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-          <input
-            type="checkbox"
-            id="recurring"
-            checked={formData.is_recurring}
-            onChange={(e) => setFormData({ ...formData, is_recurring: e.target.checked })}
-            className="w-4 h-4 text-tenir-600 rounded"
+        {!isTransfer && (
+          <Input
+            label="Vendeur / Payeur"
+            value={formData.vendor}
+            onChange={(e) => setFormData({ ...formData, vendor: e.target.value })}
           />
-          <label htmlFor="recurring" className="text-sm font-medium text-gray-700">
-            {t('recurring')}
-          </label>
-        </div>
+        )}
 
-        {formData.is_recurring && (
-          <Select
-            label="Frequency"
-            value={formData.recurrence_frequency}
-            onChange={(value) => setFormData({ ...formData, recurrence_frequency: value as string })}
-            options={[
-              { value: 'monthly', label: t('monthly') },
-              { value: 'quarterly', label: t('quarterly') },
-              { value: 'annually', label: t('annually') },
-            ]}
-          />
+        {!isTransfer && (
+          <>
+            <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+              <input
+                type="checkbox"
+                id="recurring"
+                checked={formData.is_recurring}
+                onChange={(e) => setFormData({ ...formData, is_recurring: e.target.checked })}
+                className="w-4 h-4 text-tenir-600 rounded"
+              />
+              <label htmlFor="recurring" className="text-sm font-medium text-gray-700">
+                {t('recurring')}
+              </label>
+            </div>
+            {formData.is_recurring && (
+              <Select
+                label={t('frequency')}
+                value={formData.recurrence_frequency}
+                onChange={(value) => setFormData({ ...formData, recurrence_frequency: String(value) })}
+                options={[
+                  { value: 'monthly', label: t('monthly') },
+                  { value: 'quarterly', label: t('quarterly') },
+                  { value: 'annually', label: t('annually') },
+                ]}
+              />
+            )}
+          </>
         )}
       </form>
     </Modal>
@@ -528,28 +835,39 @@ function TransactionModal({
 // ─── Transaction Detail Modal ─────────────────────────────────────────────────
 
 function TransactionDetailModal({
-  tx, onClose, onEdit, onDelete, onReceipt, categoryOptions,
+  tx, onClose, onEdit, onDelete, onReceipt, onLinkTx, bankAccounts, linkedTx,
 }: {
   tx: Transaction;
   onClose: () => void;
   onEdit: (tx: Transaction) => void;
   onDelete: (id: string) => void;
   onReceipt: (tx: Transaction) => void;
-  categoryOptions: { value: string; label: string }[];
+  onLinkTx: (tx: Transaction) => void;
+  bankAccounts: BankAccount[];
+  linkedTx?: Transaction | null;
 }) {
+  const t = useTranslations('expenses');
   const catLabel = categoryOptions.find((c) => c.value === tx.category)?.label || tx.category;
+  const account = bankAccounts.find((a) => a.id === tx.account_id);
+
   const typeColors: Record<string, string> = {
     expense: 'text-red-600 bg-red-50',
     income: 'text-emerald-600 bg-emerald-50',
     dividend: 'text-blue-600 bg-blue-50',
     capital_gain: 'text-purple-600 bg-purple-50',
     interest: 'text-sky-600 bg-sky-50',
+    transfer: 'text-amber-600 bg-amber-50',
+  };
+
+  const transferTypeLabel: Record<string, string> = {
+    credit_card_payment: t('creditCardPayment'),
+    account_advance: t('accountAdvance'),
+    transfer: t('interAccountTransfer'),
   };
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
           <div className="min-w-0 flex-1">
             <p className="text-base font-semibold text-gray-900 truncate">{tx.description}</p>
@@ -560,62 +878,104 @@ function TransactionDetailModal({
           </button>
         </div>
 
-        {/* Amount hero */}
         <div className="px-6 py-5 text-center border-b border-gray-50">
           <p className={cn('text-3xl font-bold', tx.amount < 0 ? 'text-red-600' : 'text-emerald-600')}>
             {tx.amount < 0 ? '−' : '+'}{formatCurrency(Math.abs(tx.amount))}
           </p>
-          <div className="flex items-center justify-center gap-2 mt-2">
+          <div className="flex items-center justify-center gap-2 mt-2 flex-wrap">
             <span className={cn('text-xs font-semibold px-2.5 py-1 rounded-full capitalize', typeColors[tx.type] || 'text-gray-600 bg-gray-100')}>
-              {tx.type === 'capital_gain' ? 'Capital gain' : tx.type}
+              {tx.type === 'capital_gain' ? 'Gain en capital' : tx.type === 'transfer' ? 'Transfert' : tx.type}
             </span>
             {tx.receipt_id && (
               <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-tenir-50 text-tenir-600">
-                <Paperclip size={10} /> Receipt
+                <Paperclip size={10} /> Reçu
+              </span>
+            )}
+            {tx.linked_transaction_id && (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-50 text-blue-600">
+                <Link2 size={10} /> {t('linkedTransaction')}
               </span>
             )}
           </div>
         </div>
 
-        {/* Fields */}
         <div className="px-6 py-4 grid grid-cols-2 gap-x-6 gap-y-4">
           <div>
             <p className="text-xs text-gray-400 mb-0.5">Date</p>
             <p className="text-sm font-medium text-gray-900">{formatDate(tx.date)}</p>
           </div>
-          <div>
-            <p className="text-xs text-gray-400 mb-0.5">Category</p>
-            <p className="text-sm font-medium text-gray-900">{catLabel || '—'}</p>
-          </div>
+          {tx.type !== 'transfer' && (
+            <div>
+              <p className="text-xs text-gray-400 mb-0.5">Catégorie</p>
+              <p className="text-sm font-medium text-gray-900">{catLabel || '—'}</p>
+            </div>
+          )}
+          {account && (
+            <div>
+              <p className="text-xs text-gray-400 mb-0.5">{t('account')}</p>
+              <p className="text-sm font-medium text-gray-900 flex items-center gap-1.5">
+                <AccountIcon type={account.type} size={13} className="text-gray-500" />
+                {account.name}
+                {account.last_four && <span className="text-gray-400">····{account.last_four}</span>}
+              </p>
+            </div>
+          )}
+          {tx.transfer_type && (
+            <div>
+              <p className="text-xs text-gray-400 mb-0.5">{t('transferType')}</p>
+              <p className="text-sm font-medium text-gray-900">{transferTypeLabel[tx.transfer_type] || tx.transfer_type}</p>
+            </div>
+          )}
           {tx.vendor && (
             <div className="col-span-2">
-              <p className="text-xs text-gray-400 mb-0.5">Vendor</p>
+              <p className="text-xs text-gray-400 mb-0.5">Vendeur</p>
               <p className="text-sm font-medium text-gray-900">{tx.vendor}</p>
             </div>
           )}
           {tx.is_recurring && (
             <div>
-              <p className="text-xs text-gray-400 mb-0.5">Recurring</p>
-              <p className="text-sm font-medium text-gray-900 capitalize">{tx.recurrence_frequency || 'Yes'}</p>
+              <p className="text-xs text-gray-400 mb-0.5">Récurrent</p>
+              <p className="text-sm font-medium text-gray-900 capitalize">{tx.recurrence_frequency || 'Oui'}</p>
+            </div>
+          )}
+          {linkedTx && (
+            <div className="col-span-2 p-3 bg-blue-50 rounded-xl border border-blue-100">
+              <p className="text-xs text-blue-500 mb-1 font-medium">{t('linkedTransaction')}</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">{linkedTx.description}</p>
+                  <p className="text-xs text-gray-500">{formatDate(linkedTx.date)}</p>
+                </div>
+                <p className={cn('text-sm font-bold', linkedTx.amount < 0 ? 'text-red-600' : 'text-emerald-600')}>
+                  {formatCurrency(linkedTx.amount)}
+                </p>
+              </div>
             </div>
           )}
         </div>
 
-        {/* Actions */}
-        <div className="px-6 pb-5 flex gap-2 border-t border-gray-50 pt-4">
+        <div className="px-6 pb-5 flex gap-2 border-t border-gray-50 pt-4 flex-wrap">
           <button
             onClick={() => onReceipt(tx)}
-            className={cn('flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-colors flex-1 justify-center',
+            className={cn('flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-colors flex-1 justify-center min-w-0',
               tx.receipt_id ? 'bg-tenir-50 text-tenir-600 hover:bg-tenir-100' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')}
           >
             <Paperclip size={14} />
-            {tx.receipt_id ? 'View receipt' : 'Attach receipt'}
+            {tx.receipt_id ? 'Reçu' : 'Reçu'}
+          </button>
+          <button
+            onClick={() => onLinkTx(tx)}
+            className={cn('flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-colors flex-1 justify-center min-w-0',
+              tx.linked_transaction_id ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' : 'bg-gray-100 text-gray-600 hover:bg-gray-200')}
+          >
+            <Link2 size={14} />
+            Lier
           </button>
           <button
             onClick={() => onEdit(tx)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors flex-1 justify-center"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors flex-1 justify-center min-w-0"
           >
-            <Edit2 size={14} /> Edit
+            <Edit2 size={14} /> Modifier
           </button>
           <button
             onClick={() => onDelete(tx.id)}
@@ -629,44 +989,39 @@ function TransactionDetailModal({
   );
 }
 
-function SummaryCard({
-  title,
-  value,
-  isNegative,
-  subtitle,
-}: {
-  title: string;
-  value: number;
-  isNegative?: boolean;
-  subtitle?: string;
+// ─── Summary Card ─────────────────────────────────────────────────────────────
+
+function SummaryCard({ title, value, isNegative, subtitle }: {
+  title: string; value: number; isNegative?: boolean; subtitle?: string;
 }) {
   return (
     <Card padding="md" shadow="sm">
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <p className="text-sm font-medium text-gray-600 mb-1">{title}</p>
-          <p
-            className={cn(
-              'text-2xl font-bold',
-              isNegative ? 'text-red-600' : 'text-green-600'
-            )}
-          >
+          <p className={cn('text-2xl font-bold', isNegative ? 'text-red-600' : 'text-green-600')}>
             {formatCurrency(value)}
           </p>
           {subtitle && <p className="text-xs text-gray-500 mt-2">{subtitle}</p>}
         </div>
-        <div
-          className={cn(
-            'p-3 rounded-lg',
-            isNegative ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'
-          )}
-        >
+        <div className={cn('p-3 rounded-lg', isNegative ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600')}>
           {isNegative ? <ArrowDownLeft size={24} /> : <ArrowUpRight size={24} />}
         </div>
       </div>
     </Card>
   );
 }
+
+// ─── Account type label helpers ───────────────────────────────────────────────
+
+const accountTypeColor: Record<AccountType, string> = {
+  checking: 'bg-blue-50 text-blue-700 border-blue-100',
+  savings: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+  credit_card: 'bg-purple-50 text-purple-700 border-purple-100',
+  line_of_credit: 'bg-amber-50 text-amber-700 border-amber-100',
+};
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ExpensesPage() {
   const t = useTranslations('expenses');
@@ -675,23 +1030,50 @@ export default function ExpensesPage() {
   const { orgId, user, loading: orgLoading } = useOrganization();
   const searchParams = useSearchParams();
 
+  // ── State ──────────────────────────────────────────────────────────────────
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [txLoading, setTxLoading] = useState(false);
   const [txError, setTxError] = useState<string | null>(null);
+
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [accountsLoading, setAccountsLoading] = useState(false);
+
+  // Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editTx, setEditTx] = useState<Transaction | null>(null);
   const [viewTx, setViewTx] = useState<Transaction | null>(null);
   const [receiptModalTx, setReceiptModalTx] = useState<Transaction | null>(null);
+  const [linkTxModal, setLinkTxModal] = useState<Transaction | null>(null);
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [editAccount, setEditAccount] = useState<BankAccount | null>(null);
+
+  // Filters
   const [searchQuery, setSearchQuery] = useState<string>(() => searchParams.get('search') ?? '');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [accountFilter, setAccountFilter] = useState<string>('all');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
 
-  // Sync searchQuery when the URL param changes (e.g. navigating from header search)
   useEffect(() => {
-    const paramValue = searchParams.get('search') ?? '';
-    setSearchQuery(paramValue);
+    setSearchQuery(searchParams.get('search') ?? '');
   }, [searchParams]);
+
+  // ── Load data ──────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!orgId) return;
+    async function fetchAccounts() {
+      setAccountsLoading(true);
+      const { data } = await (supabase as any)
+        .from('bank_accounts')
+        .select('*')
+        .eq('organization_id', orgId)
+        .eq('is_active', true)
+        .order('created_at', { ascending: true });
+      setBankAccounts(data || []);
+      setAccountsLoading(false);
+    }
+    fetchAccounts();
+  }, [orgId]);
 
   useEffect(() => {
     if (!orgId) return;
@@ -715,15 +1097,24 @@ export default function ExpensesPage() {
     fetchTransactions();
   }, [orgId]);
 
+  // ── Filters ────────────────────────────────────────────────────────────────
   const filteredTransactions = transactions.filter((tx) => {
     if (typeFilter !== 'all' && tx.type !== typeFilter) return false;
     if (categoryFilter !== 'all' && tx.category !== categoryFilter) return false;
+    if (accountFilter !== 'all' && tx.account_id !== accountFilter) return false;
     if (dateRange.start && tx.date < dateRange.start) return false;
     if (dateRange.end && tx.date > dateRange.end) return false;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      if (
+        !tx.description.toLowerCase().includes(q) &&
+        !(tx.vendor || '').toLowerCase().includes(q)
+      ) return false;
+    }
     return true;
   });
 
-  // Calculate summaries
+  // ── Summaries ──────────────────────────────────────────────────────────────
   const totalExpenses = transactions
     .filter((tx) => tx.type === 'expense')
     .reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
@@ -734,13 +1125,11 @@ export default function ExpensesPage() {
 
   const netIncome = totalIncome - totalExpenses;
 
-  // Tax deductible (all expenses + professional income, excluding dividends/capital gains)
   const taxDeductible = totalExpenses +
     transactions
       .filter((tx) => tx.type === 'income')
       .reduce((sum, tx) => sum + tx.amount, 0);
 
-  // Category breakdown
   const categoryBreakdown = categoryOptions.map((cat) => {
     const amount = transactions
       .filter((tx) => tx.category === cat.value)
@@ -748,29 +1137,110 @@ export default function ExpensesPage() {
     return { ...cat, amount };
   }).filter((cat) => cat.amount > 0);
 
+  // ── Account CRUD ───────────────────────────────────────────────────────────
+  const handleSaveAccount = async (data: AccountFormData) => {
+    if (!orgId) return;
+    if (editAccount) {
+      const { data: updated, error } = await (supabase as any)
+        .from('bank_accounts')
+        .update({ ...data, institution: data.institution || null, last_four: data.last_four || null, credit_limit: data.credit_limit || null })
+        .eq('id', editAccount.id)
+        .select()
+        .single();
+      if (!error && updated) {
+        setBankAccounts((prev) => prev.map((a) => a.id === editAccount.id ? updated : a));
+      }
+      setEditAccount(null);
+    } else {
+      const { data: newAcc, error } = await (supabase as any)
+        .from('bank_accounts')
+        .insert({
+          organization_id: orgId,
+          name: data.name,
+          type: data.type,
+          institution: data.institution || null,
+          last_four: data.last_four || null,
+          currency: 'CAD',
+          current_balance: data.current_balance,
+          credit_limit: data.credit_limit || null,
+        })
+        .select()
+        .single();
+      if (!error && newAcc) {
+        setBankAccounts((prev) => [...prev, newAcc]);
+      }
+    }
+    setIsAccountModalOpen(false);
+  };
+
+  // ── Transaction CRUD ───────────────────────────────────────────────────────
   const handleAddTransaction = async (data: ModalFormData) => {
     if (!orgId || !user) return;
     try {
-      const insertData = {
-        organization_id: orgId,
-        type: data.type,
-        category: data.category,
-        date: data.date,
-        description: data.description,
-        amount: data.amount,
-        vendor: data.vendor || null,
-        is_recurring: data.is_recurring,
-        recurrence_frequency: data.recurrence_frequency || null,
-        currency: 'CAD',
-        created_by: user.id,
-      };
-      const { data: newTx, error } = await (supabase as any)
-        .from('transactions')
-        .insert(insertData)
-        .select()
-        .single();
-      if (error) throw error;
-      setTransactions([newTx, ...transactions]);
+      const isTransfer = data.type === 'transfer';
+
+      if (isTransfer && data.destination_account_id) {
+        // Create both sides of the transfer and link them
+        const base = {
+          organization_id: orgId,
+          type: 'transfer',
+          category: 'other',
+          date: data.date,
+          description: data.description,
+          currency: 'CAD',
+          is_recurring: false,
+          recurrence_frequency: null,
+          transfer_type: data.transfer_type || null,
+          created_by: user.id,
+        };
+        const absAmount = Math.abs(data.amount);
+
+        const { data: srcTx, error: srcErr } = await (supabase as any)
+          .from('transactions')
+          .insert({ ...base, amount: -absAmount, account_id: data.account_id || null })
+          .select()
+          .single();
+        if (srcErr) throw srcErr;
+
+        const { data: dstTx, error: dstErr } = await (supabase as any)
+          .from('transactions')
+          .insert({ ...base, amount: absAmount, account_id: data.destination_account_id })
+          .select()
+          .single();
+        if (dstErr) throw dstErr;
+
+        // Link them to each other
+        await (supabase as any).from('transactions').update({ linked_transaction_id: dstTx.id }).eq('id', srcTx.id);
+        await (supabase as any).from('transactions').update({ linked_transaction_id: srcTx.id }).eq('id', dstTx.id);
+
+        const linkedSrc = { ...srcTx, linked_transaction_id: dstTx.id };
+        const linkedDst = { ...dstTx, linked_transaction_id: srcTx.id };
+        setTransactions((prev) => [linkedSrc, linkedDst, ...prev]);
+      } else {
+        const isIncome = ['income', 'dividend', 'capital_gain', 'interest'].includes(data.type);
+        const insertData = {
+          organization_id: orgId,
+          type: data.type,
+          category: data.category,
+          date: data.date,
+          description: data.description,
+          amount: isTransfer ? -Math.abs(data.amount) : data.amount,
+          vendor: data.vendor || null,
+          is_recurring: data.is_recurring,
+          recurrence_frequency: data.recurrence_frequency || null,
+          currency: 'CAD',
+          created_by: user.id,
+          account_id: data.account_id || null,
+          transfer_type: data.transfer_type || null,
+        };
+        const { data: newTx, error } = await (supabase as any)
+          .from('transactions')
+          .insert(insertData)
+          .select()
+          .single();
+        if (error) throw error;
+        setTransactions([newTx, ...transactions]);
+      }
     } catch (e: any) {
       setTxError(e.message);
     }
@@ -790,13 +1260,14 @@ export default function ExpensesPage() {
           vendor: data.vendor || null,
           is_recurring: data.is_recurring,
           recurrence_frequency: data.recurrence_frequency || null,
+          account_id: data.account_id || null,
+          transfer_type: data.transfer_type || null,
         })
         .eq('id', editTx.id)
         .select()
         .single();
       if (error) throw error;
       setTransactions((prev) => prev.map((tx) => tx.id === editTx.id ? updated : tx));
-      // update viewTx if it's open on the same record
       if (viewTx?.id === editTx.id) setViewTx(updated);
     } catch (e: any) {
       setTxError(e.message);
@@ -809,12 +1280,25 @@ export default function ExpensesPage() {
     );
   };
 
+  const handleTxLinked = (txId: string, linkedId: string | null) => {
+    setTransactions((prev) =>
+      prev.map((tx) => {
+        if (tx.id === txId) return { ...tx, linked_transaction_id: linkedId };
+        if (linkedId && tx.id === linkedId) return { ...tx, linked_transaction_id: txId };
+        return tx;
+      })
+    );
+    if (viewTx?.id === txId) setViewTx((prev) => prev ? { ...prev, linked_transaction_id: linkedId } : null);
+  };
+
   const handleDeleteTransaction = async (id: string) => {
     try {
-      const { error } = await (supabase as any)
-        .from('transactions')
-        .delete()
-        .eq('id', id);
+      const tx = transactions.find((t) => t.id === id);
+      // Unlink the paired transaction if any
+      if (tx?.linked_transaction_id) {
+        await (supabase as any).from('transactions').update({ linked_transaction_id: null }).eq('id', tx.linked_transaction_id);
+      }
+      const { error } = await (supabase as any).from('transactions').delete().eq('id', id);
       if (error) throw error;
       setTransactions(transactions.filter((tx) => tx.id !== id));
     } catch (e: any) {
@@ -823,6 +1307,22 @@ export default function ExpensesPage() {
   };
 
   const isLoading = orgLoading || txLoading;
+
+  const typeOptions = [
+    { value: 'expense', label: t('expense') },
+    { value: 'income', label: t('income') },
+    { value: 'dividend', label: t('dividend') },
+    { value: 'capital_gain', label: t('capitalGain') },
+    { value: 'interest', label: t('interest') },
+    { value: 'transfer', label: t('transfer') },
+  ];
+
+  const accountTypeLabels: Record<AccountType, string> = {
+    checking: t('checking'),
+    savings: t('savings'),
+    credit_card: t('creditCard'),
+    line_of_credit: t('lineOfCredit'),
+  };
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -838,58 +1338,119 @@ export default function ExpensesPage() {
 
           {/* Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <SummaryCard
-              title="Total Expenses"
-              value={totalExpenses}
-              isNegative
-              subtitle="Deductible costs"
-            />
-            <SummaryCard
-              title="Total Income"
-              value={totalIncome}
-              subtitle="All revenue sources"
-            />
-            <SummaryCard
-              title="Net Income"
-              value={netIncome}
-              isNegative={netIncome < 0}
-              subtitle="Income minus expenses"
-            />
-            <SummaryCard
-              title="Tax Deductible"
-              value={taxDeductible}
-              isNegative
-              subtitle="For tax filing"
-            />
+            <SummaryCard title="Dépenses totales" value={totalExpenses} isNegative subtitle="Coûts déductibles" />
+            <SummaryCard title="Revenus totaux" value={totalIncome} subtitle="Toutes sources" />
+            <SummaryCard title="Revenu net" value={netIncome} isNegative={netIncome < 0} subtitle="Revenus moins dépenses" />
+            <SummaryCard title="Déductible" value={taxDeductible} isNegative subtitle="Pour déclaration fiscale" />
           </div>
 
-          {/* Filters */}
-          <Card padding="md" shadow="sm" className="mb-8">
+          {/* ── Accounts Section ────────────────────────────────────────────── */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold text-gray-900">{t('accounts')}</h2>
+              <Button
+                variant="outline"
+                size="sm"
+                icon={<Plus size={14} />}
+                onClick={() => { setEditAccount(null); setIsAccountModalOpen(true); }}
+              >
+                {t('addAccount')}
+              </Button>
+            </div>
+
+            {accountsLoading ? (
+              <div className="flex items-center gap-2 text-sm text-gray-400 py-4">
+                <Loader2 size={16} className="animate-spin" /> Chargement des comptes…
+              </div>
+            ) : bankAccounts.length === 0 ? (
+              <div className="p-6 border-2 border-dashed border-gray-200 rounded-2xl text-center">
+                <Landmark size={28} className="text-gray-300 mx-auto mb-2" />
+                <p className="text-sm text-gray-500">{t('noAccounts')}</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {bankAccounts.map((acc) => {
+                  const isCreditType = acc.type === 'credit_card' || acc.type === 'line_of_credit';
+                  const usage = isCreditType && acc.credit_limit ? (Math.abs(acc.current_balance) / acc.credit_limit) * 100 : 0;
+                  return (
+                    <button
+                      key={acc.id}
+                      onClick={() => { setEditAccount(acc); setIsAccountModalOpen(true); }}
+                      className={cn(
+                        'text-left p-4 rounded-2xl border transition-all hover:shadow-md group',
+                        accountTypeColor[acc.type]
+                      )}
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-lg bg-white/60 flex items-center justify-center">
+                            <AccountIcon type={acc.type} size={16} />
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold leading-tight">{acc.name}</p>
+                            {acc.last_four && <p className="text-xs opacity-70">····{acc.last_four}</p>}
+                          </div>
+                        </div>
+                        <Edit2 size={12} className="opacity-0 group-hover:opacity-50 transition-opacity mt-1" />
+                      </div>
+                      <p className="text-lg font-bold">{formatCurrency(acc.current_balance)}</p>
+                      {acc.institution && <p className="text-xs opacity-60 mt-0.5">{acc.institution}</p>}
+                      {isCreditType && acc.credit_limit && (
+                        <div className="mt-2">
+                          <div className="w-full bg-black/10 rounded-full h-1.5">
+                            <div
+                              className="bg-current h-1.5 rounded-full transition-all"
+                              style={{ width: `${Math.min(usage, 100)}%` }}
+                            />
+                          </div>
+                          <p className="text-xs opacity-60 mt-1">Limite: {formatCurrency(acc.credit_limit)}</p>
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* ── Filters ────────────────────────────────────────────────────── */}
+          <Card padding="md" shadow="sm" className="mb-6">
             <CardHeader>
-              <CardTitle level="h3">Filters</CardTitle>
+              <CardTitle level="h3">Filtres</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
                 <Select
                   label={t('type')}
                   value={typeFilter}
-                  onChange={(value) => setTypeFilter(value as string)}
-                  options={[{ value: 'all', label: 'All Types' }, ...typeOptions]}
+                  onChange={(value) => setTypeFilter(String(value))}
+                  options={[{ value: 'all', label: 'Tous les types' }, ...typeOptions]}
                 />
                 <Select
                   label={commonT('category')}
                   value={categoryFilter}
-                  onChange={(value) => setCategoryFilter(value as string)}
-                  options={[{ value: 'all', label: 'All Categories' }, ...categoryOptions]}
+                  onChange={(value) => setCategoryFilter(String(value))}
+                  options={[{ value: 'all', label: 'Toutes les catégories' }, ...categoryOptions]}
                 />
+                {bankAccounts.length > 0 && (
+                  <Select
+                    label={t('account')}
+                    value={accountFilter}
+                    onChange={(value) => setAccountFilter(String(value))}
+                    options={[
+                      { value: 'all', label: 'Tous les comptes' },
+                      ...bankAccounts.map((a) => ({ value: a.id, label: a.name })),
+                    ]}
+                  />
+                )}
                 <Input
-                  label="Start Date"
+                  label={t('startDate')}
                   type="date"
                   value={dateRange.start}
                   onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
                 />
                 <Input
-                  label="End Date"
+                  label={t('endDate')}
                   type="date"
                   value={dateRange.end}
                   onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
@@ -902,18 +1463,19 @@ export default function ExpensesPage() {
                     onClick={() => {
                       setTypeFilter('all');
                       setCategoryFilter('all');
+                      setAccountFilter('all');
                       setDateRange({ start: '', end: '' });
                     }}
                   >
-                    Clear filters
+                    Effacer
                   </Button>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Add Transaction Button */}
-          <div className="mb-8">
+          {/* ── Add Transaction ─────────────────────────────────────────────── */}
+          <div className="mb-6">
             <Button
               variant="primary"
               icon={<Plus size={18} />}
@@ -924,7 +1486,7 @@ export default function ExpensesPage() {
             </Button>
           </div>
 
-          {/* Transactions Table */}
+          {/* ── Transactions Table ──────────────────────────────────────────── */}
           <Card padding="none" shadow="sm" className="mb-8">
             <CardHeader className="px-6 pt-6">
               <CardTitle level="h3">
@@ -933,103 +1495,127 @@ export default function ExpensesPage() {
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <div className="text-center py-12 text-gray-500">Loading transactions...</div>
+                <div className="text-center py-12 text-gray-500">Chargement des transactions…</div>
               ) : (
                 <Table hoverable>
                   <TableHeader>
                     <TableRow isHeader>
                       <TableHead>Date</TableHead>
                       <TableHead>Description</TableHead>
-                      <TableHead>Category</TableHead>
+                      <TableHead>{t('account')}</TableHead>
+                      <TableHead>Catégorie</TableHead>
                       <TableHead>Type</TableHead>
-                      <TableHead align="right">Amount</TableHead>
+                      <TableHead align="right">Montant</TableHead>
                       <TableHead align="center">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredTransactions.length > 0 ? (
-                      filteredTransactions.map((tx) => (
-                        <TableRow key={tx.id} onClick={() => setViewTx(tx)} className="cursor-pointer">
-                          <TableCell>{formatDate(tx.date)}</TableCell>
-                          <TableCell>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <p className="font-medium text-gray-900">{tx.description}</p>
-                                {tx.receipt_id && (
-                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-tenir-50 text-tenir-600 border border-tenir-100">
-                                    <Paperclip size={10} />
-                                    Receipt
-                                  </span>
-                                )}
+                      filteredTransactions.map((tx) => {
+                        const account = bankAccounts.find((a) => a.id === tx.account_id);
+                        return (
+                          <TableRow key={tx.id} onClick={() => setViewTx(tx)} className="cursor-pointer">
+                            <TableCell>{formatDate(tx.date)}</TableCell>
+                            <TableCell>
+                              <div>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <p className="font-medium text-gray-900">{tx.description}</p>
+                                  {tx.receipt_id && (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-tenir-50 text-tenir-600 border border-tenir-100">
+                                      <Paperclip size={9} />
+                                    </span>
+                                  )}
+                                  {tx.linked_transaction_id && (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-blue-50 text-blue-600 border border-blue-100">
+                                      <Link2 size={9} />
+                                    </span>
+                                  )}
+                                </div>
+                                {tx.vendor && <p className="text-xs text-gray-400">{tx.vendor}</p>}
                               </div>
-                              {tx.vendor && (
-                                <p className="text-sm text-gray-500">{tx.vendor}</p>
+                            </TableCell>
+                            <TableCell>
+                              {account ? (
+                                <div className="flex items-center gap-1.5">
+                                  <AccountIcon type={account.type} size={13} className="text-gray-400 flex-shrink-0" />
+                                  <span className="text-sm text-gray-600 truncate max-w-[100px]">{account.name}</span>
+                                  {account.last_four && <span className="text-xs text-gray-400">····{account.last_four}</span>}
+                                </div>
+                              ) : (
+                                <span className="text-gray-300 text-xs">—</span>
                               )}
-                            </div>
-                          </TableCell>
-                          <TableCell>{tx.category}</TableCell>
-                          <TableCell>
-                            <Badge
-                              variant={
-                                tx.type === 'expense'
-                                  ? 'error'
-                                  : tx.type === 'income'
-                                    ? 'success'
-                                    : 'info'
-                              }
-                              size="sm"
-                            >
-                              {tx.type === 'capital_gain' ? 'Capital gain' : tx.type}
-                            </Badge>
-                          </TableCell>
-                          <TableCell align="right">
-                            <span
-                              className={cn(
-                                'font-semibold',
-                                tx.amount < 0 ? 'text-red-600' : 'text-green-600'
+                            </TableCell>
+                            <TableCell>
+                              {tx.type === 'transfer' ? (
+                                <span className="text-xs text-gray-400 italic">
+                                  {tx.transfer_type === 'credit_card_payment' ? 'Paiement carte' :
+                                   tx.transfer_type === 'account_advance' ? 'Avance' : 'Transfert'}
+                                </span>
+                              ) : (
+                                <span className="text-sm text-gray-600">{tx.category}</span>
                               )}
-                            >
-                              {formatCurrency(tx.amount)}
-                            </span>
-                          </TableCell>
-                          <TableCell align="center" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                title={tx.receipt_id ? 'Manage receipt' : 'Attach receipt'}
-                                onClick={(e) => { e.stopPropagation(); setReceiptModalTx(tx); }}
-                                className={cn(
-                                  'p-1.5 rounded-lg transition-colors',
-                                  tx.receipt_id
-                                    ? 'bg-tenir-50 text-tenir-600 hover:bg-tenir-100'
-                                    : 'hover:bg-gray-100 text-gray-400 hover:text-gray-700'
-                                )}
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant={
+                                  tx.type === 'expense' ? 'error' :
+                                  tx.type === 'transfer' ? 'warning' :
+                                  tx.type === 'income' ? 'success' : 'info'
+                                }
+                                size="sm"
                               >
-                                <Paperclip size={14} />
-                              </button>
-                              <button
-                                title="Edit"
-                                onClick={(e) => { e.stopPropagation(); setEditTx(tx); }}
-                                className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-gray-700"
-                              >
-                                <Edit2 size={14} />
-                              </button>
-                              <button
-                                title="Delete"
-                                className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-gray-400 hover:text-red-600"
-                                onClick={(e) => { e.stopPropagation(); handleDeleteTransaction(tx.id); }}
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
+                                {tx.type === 'capital_gain' ? 'Gain cap.' :
+                                 tx.type === 'transfer' ? 'Transfert' : tx.type}
+                              </Badge>
+                            </TableCell>
+                            <TableCell align="right">
+                              <span className={cn('font-semibold', tx.amount < 0 ? 'text-red-600' : 'text-green-600')}>
+                                {formatCurrency(tx.amount)}
+                              </span>
+                            </TableCell>
+                            <TableCell align="center" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  title={tx.receipt_id ? 'Gérer le reçu' : 'Attacher un reçu'}
+                                  onClick={(e) => { e.stopPropagation(); setReceiptModalTx(tx); }}
+                                  className={cn('p-1.5 rounded-lg transition-colors',
+                                    tx.receipt_id ? 'bg-tenir-50 text-tenir-600 hover:bg-tenir-100' : 'hover:bg-gray-100 text-gray-400 hover:text-gray-700')}
+                                >
+                                  <Paperclip size={14} />
+                                </button>
+                                <button
+                                  title={tx.linked_transaction_id ? 'Transaction liée' : 'Lier une transaction'}
+                                  onClick={(e) => { e.stopPropagation(); setLinkTxModal(tx); }}
+                                  className={cn('p-1.5 rounded-lg transition-colors',
+                                    tx.linked_transaction_id ? 'bg-blue-50 text-blue-600 hover:bg-blue-100' : 'hover:bg-gray-100 text-gray-400 hover:text-gray-700')}
+                                >
+                                  <Link2 size={14} />
+                                </button>
+                                <button
+                                  title="Modifier"
+                                  onClick={(e) => { e.stopPropagation(); setEditTx(tx); }}
+                                  className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-400 hover:text-gray-700"
+                                >
+                                  <Edit2 size={14} />
+                                </button>
+                                <button
+                                  title="Supprimer"
+                                  onClick={(e) => { e.stopPropagation(); handleDeleteTransaction(tx.id); }}
+                                  className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-gray-400 hover:text-red-600"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8">
+                        <TableCell colSpan={7} className="text-center py-8">
                           <p className="text-gray-600">
                             {transactions.length === 0
-                              ? 'No transactions yet. Add your first transaction to get started.'
+                              ? t('noTransactions')
                               : commonT('noResults')}
                           </p>
                         </TableCell>
@@ -1041,11 +1627,11 @@ export default function ExpensesPage() {
             </CardContent>
           </Card>
 
-          {/* Category Breakdown */}
+          {/* ── Category Breakdown ──────────────────────────────────────────── */}
           {categoryBreakdown.length > 0 && (
             <Card padding="md" shadow="sm">
               <CardHeader>
-                <CardTitle level="h3">Category Breakdown</CardTitle>
+                <CardTitle level="h3">Répartition par catégorie</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
@@ -1056,14 +1642,10 @@ export default function ExpensesPage() {
                         <div className="w-40 bg-gray-200 rounded-full h-2">
                           <div
                             className="bg-tenir-500 h-2 rounded-full transition-all"
-                            style={{
-                              width: `${(cat.amount / Math.max(...categoryBreakdown.map((c) => c.amount))) * 100}%`,
-                            }}
+                            style={{ width: `${(cat.amount / Math.max(...categoryBreakdown.map((c) => c.amount))) * 100}%` }}
                           />
                         </div>
-                        <span className="font-semibold text-gray-900 w-24 text-right">
-                          {formatCurrency(cat.amount)}
-                        </span>
+                        <span className="font-semibold text-gray-900 w-24 text-right">{formatCurrency(cat.amount)}</span>
                       </div>
                     </div>
                   ))}
@@ -1074,24 +1656,31 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      {/* Add transaction */}
+      {/* ── Modals ─────────────────────────────────────────────────────────── */}
+      <AccountModal
+        isOpen={isAccountModalOpen}
+        onClose={() => { setIsAccountModalOpen(false); setEditAccount(null); }}
+        onSubmit={handleSaveAccount}
+        initialData={editAccount || undefined}
+      />
+
       <TransactionModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSubmit={handleAddTransaction}
+        bankAccounts={bankAccounts}
       />
 
-      {/* Edit transaction */}
       {editTx && (
         <TransactionModal
           isOpen={true}
           onClose={() => setEditTx(null)}
           onSubmit={handleEditTransaction}
           initialData={editTx}
+          bankAccounts={bankAccounts}
         />
       )}
 
-      {/* View transaction detail */}
       {viewTx && (
         <TransactionDetailModal
           tx={viewTx}
@@ -1099,7 +1688,9 @@ export default function ExpensesPage() {
           onEdit={(tx) => { setViewTx(null); setEditTx(tx); }}
           onDelete={(id) => { setViewTx(null); handleDeleteTransaction(id); }}
           onReceipt={(tx) => { setViewTx(null); setReceiptModalTx(tx); }}
-          categoryOptions={categoryOptions}
+          onLinkTx={(tx) => { setViewTx(null); setLinkTxModal(tx); }}
+          bankAccounts={bankAccounts}
+          linkedTx={viewTx.linked_transaction_id ? transactions.find((t) => t.id === viewTx.linked_transaction_id) : null}
         />
       )}
 
@@ -1110,6 +1701,15 @@ export default function ExpensesPage() {
           userId={user.id}
           onClose={() => setReceiptModalTx(null)}
           onLinked={handleReceiptLinked}
+        />
+      )}
+
+      {linkTxModal && (
+        <LinkTransactionModal
+          tx={linkTxModal}
+          allTransactions={transactions}
+          onClose={() => setLinkTxModal(null)}
+          onLinked={handleTxLinked}
         />
       )}
     </div>
