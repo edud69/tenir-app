@@ -150,7 +150,7 @@ function HomeOfficeFormModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={initial ? t('editLocation') : t('addLocation')} size="lg">
+    <Modal isOpen={open} onClose={onClose} title={initial ? t('editLocation') : t('addLocation')} size="lg">
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
           <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
@@ -436,7 +436,7 @@ function HomeOfficeExpenseModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={t('addExpense')} size="md">
+    <Modal isOpen={open} onClose={onClose} title={t('addExpense')} size="md">
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
           <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
@@ -588,7 +588,7 @@ function HomeOfficeDocumentsModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={t('viewProofs')} size="lg">
+    <Modal isOpen={open} onClose={onClose} title={t('viewProofs')} size="lg">
       <div className="space-y-4">
         {/* Upload zone */}
         <div>
@@ -747,7 +747,7 @@ function HomeOfficeDetailModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={t('viewDetails')} size="lg">
+    <Modal isOpen={open} onClose={onClose} title={t('viewDetails')} size="lg">
       <div className="space-y-5">
         {/* Expense table */}
         <div className="overflow-x-auto">
