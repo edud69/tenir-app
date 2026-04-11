@@ -247,6 +247,9 @@ interface EntityGraphProps {
 }
 
 function EntityGraph({ entities, relations, flows, selectedEntityId, onSelectEntity }: EntityGraphProps) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   const centerX = 250;
   const centerY = 200;
   const levelGap = 160;
@@ -378,6 +381,10 @@ function EntityGraph({ entities, relations, flows, selectedEntityId, onSelectEnt
         <p className="text-xs mt-1 opacity-70">Ajoutez une entité pour visualiser la structure</p>
       </div>
     );
+  }
+
+  if (!mounted) {
+    return <div style={{ height: 420 }} className="rounded-xl overflow-hidden border border-gray-100 bg-gray-50 animate-pulse" />;
   }
 
   return (
