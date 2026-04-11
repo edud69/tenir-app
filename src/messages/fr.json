@@ -35,6 +35,7 @@
   },
   "nav": {
     "dashboard": "Tableau de bord",
+    "entities": "Structure et flux",
     "receipts": "Reçus",
     "expenses": "Dépenses",
     "investments": "Placements",

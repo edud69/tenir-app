@@ -19,6 +19,7 @@ interface Notification {
 interface HeaderProps {
   title: string;
   onMobileMenuClick?: () => void;
+  actions?: React.ReactNode;
 }
 
 function NotificationsPanel({ orgId, onClose }: { orgId: string; onClose: () => void }) {
@@ -111,7 +112,7 @@ function NotificationsPanel({ orgId, onClose }: { orgId: string; onClose: () => 
   );
 }
 
-export default function Header({ title }: HeaderProps) {
+export default function Header({ title, actions }: HeaderProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showNotifications, setShowNotifications] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
@@ -144,6 +145,7 @@ export default function Header({ title }: HeaderProps) {
         <h1 className="text-xl font-semibold text-gray-900 tracking-tight">{title}</h1>
 
         <div className="flex items-center gap-2">
+          {actions && <div className="flex items-center gap-2 mr-1">{actions}</div>}
           {/* Search */}
           <div className={cn(
             'hidden sm:flex items-center gap-2 rounded-xl border transition-all duration-200 px-3 py-2',

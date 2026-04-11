@@ -13,6 +13,7 @@ import {
   FileText,
   CreditCard,
   Home,
+  Network,
   Settings,
   X,
   LogOut,
@@ -45,6 +46,7 @@ export default function Sidebar({ user, locale }: SidebarProps) {
 
   const navItems: NavItem[] = [
     { href: `/${locale}/dashboard`,   icon: LayoutDashboard, label: t('dashboard'),   key: 'dashboard' },
+    { href: `/${locale}/entities`,    icon: Network,         label: t('entities'),    key: 'entities' },
     { href: `/${locale}/receipts`,    icon: Receipt,         label: t('receipts'),    key: 'receipts' },
     { href: `/${locale}/expenses`,    icon: Wallet,          label: t('expenses'),    key: 'expenses' },
     { href: `/${locale}/investments`, icon: TrendingUp,      label: t('investments'), key: 'investments' },

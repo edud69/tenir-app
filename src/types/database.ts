@@ -191,6 +191,74 @@ export interface Database {
         Insert: Omit<Database['public']['Tables']['ai_conversations']['Row'], 'id' | 'created_at' | 'updated_at'>;
         Update: Partial<Database['public']['Tables']['ai_conversations']['Insert']>;
       };
+      entities: {
+        Row: {
+          id: string;
+          organization_id: string;
+          name: string;
+          entity_type: 'corporation' | 'individual';
+          neq: string | null;
+          business_number: string | null;
+          incorporation_date: string | null;
+          province: string | null;
+          corporation_type: 'ccpc' | 'general' | 'professional' | 'holding' | 'operating' | 'other' | null;
+          sin_last4: string | null;
+          is_shareholder: boolean;
+          is_current_org: boolean;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['entities']['Row'], 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Database['public']['Tables']['entities']['Insert']>;
+      };
+      entity_relations: {
+        Row: {
+          id: string;
+          organization_id: string;
+          parent_entity_id: string;
+          child_entity_id: string;
+          ownership_percentage: number;
+          share_class: string | null;
+          num_shares: number | null;
+          share_value: number | null;
+          effective_date: string;
+          end_date: string | null;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['entity_relations']['Row'], 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Database['public']['Tables']['entity_relations']['Insert']>;
+      };
+      financial_flows: {
+        Row: {
+          id: string;
+          organization_id: string;
+          from_entity_id: string;
+          to_entity_id: string;
+          flow_type: 'dividend_eligible' | 'dividend_non_eligible' | 'dividend_capital' | 'shareholder_loan' | 'loan_repayment' | 'advance' | 'advance_repayment' | 'management_fee' | 'capital_contribution';
+          amount: number;
+          currency: string;
+          date: string;
+          fiscal_year: number | null;
+          is_open_balance: boolean;
+          outstanding_balance: number | null;
+          interest_rate: number | null;
+          due_date: string | null;
+          rdtoh_refund_eligible: number | null;
+          grip_impact: number | null;
+          status: 'recorded' | 'confirmed' | 'overdue' | 'repaid' | 'cancelled';
+          description: string | null;
+          notes: string | null;
+          document_ref: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database['public']['Tables']['financial_flows']['Row'], 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Database['public']['Tables']['financial_flows']['Insert']>;
+      };
       home_offices: {
         Row: {
           id: string;
