@@ -371,5 +371,44 @@
     "address": "Address",
     "city": "City",
     "postalCode": "Postal code"
+  },
+  "fiscalAdvisor": {
+    "buttonLabel": "AI Tax Advisor",
+    "panelTitle": "AI Tax Analysis",
+    "beta": "BETA",
+    "description": "In-depth analysis of your complete tax dossier based on your real financial data: tax profiles, transactions, investments, and filings.",
+    "launchAnalysis": "Run analysis",
+    "newAnalysis": "New analysis",
+    "exportPdf": "Export PDF",
+    "analyzing": "Analysis in progress...",
+    "streamingLabel": "Generating recommendations...",
+    "featureList": {
+      "immediate": "Immediate, prioritized tax recommendations",
+      "strategy": "Long-term tax optimization strategy",
+      "risks": "Tax risk identification and mitigation"
+    },
+    "steps": {
+      "collecting": "Collecting financial data...",
+      "analyzing": "Analyzing tax structure...",
+      "generating": "Generating recommendations..."
+    },
+    "sections": {
+      "summary": "Situation summary",
+      "immediate": "Immediate recommendations",
+      "longterm": "Long-term strategy",
+      "risks": "Identified risks"
+    },
+    "priority": {
+      "critical": "Critical",
+      "high": "High priority",
+      "medium": "Medium"
+    },
+    "deadline": "Deadline",
+    "references": "References",
+    "prerequisites": "Prerequisites",
+    "mitigation": "Mitigation",
+    "retry": "Retry",
+    "error": "An error occurred during analysis. Please try again.",
+    "disclaimer": "This analysis is AI-generated from your data. Consult a CPA for personalized professional advice."
   }
 }
