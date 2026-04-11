@@ -12,12 +12,12 @@ import {
   Calculator,
   FileText,
   CreditCard,
+  Home,
+  Network,
   Settings,
-  Bot,
   X,
   LogOut,
   Globe,
-  ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Logo } from '@/components/ui/logo';
@@ -46,9 +46,11 @@ export default function Sidebar({ user, locale }: SidebarProps) {
 
   const navItems: NavItem[] = [
     { href: `/${locale}/dashboard`,   icon: LayoutDashboard, label: t('dashboard'),   key: 'dashboard' },
+    { href: `/${locale}/entities`,    icon: Network,         label: t('entities'),    key: 'entities' },
     { href: `/${locale}/receipts`,    icon: Receipt,         label: t('receipts'),    key: 'receipts' },
     { href: `/${locale}/expenses`,    icon: Wallet,          label: t('expenses'),    key: 'expenses' },
     { href: `/${locale}/investments`, icon: TrendingUp,      label: t('investments'), key: 'investments' },
+    { href: `/${locale}/home-office`, icon: Home,            label: t('homeOffice'),   key: 'home-office' },
     { href: `/${locale}/taxes`,        icon: Calculator,      label: t('taxes'),        key: 'taxes' },
     { href: `/${locale}/tax-payments`, icon: CreditCard,     label: t('taxPayments'),  key: 'tax-payments' },
     { href: `/${locale}/forms`,        icon: FileText,        label: t('forms'),        key: 'forms' },
@@ -146,14 +148,6 @@ export default function Sidebar({ user, locale }: SidebarProps) {
           </Link>
         </div>
 
-        {/* AI Assistant */}
-        <div className="mt-4">
-          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl bg-gradient-to-r from-accent-600 to-accent-500 text-white hover:from-accent-500 hover:to-accent-400 transition-all duration-150 font-medium text-sm shadow-lg shadow-accent-900/30">
-            <Bot size={18} className="flex-shrink-0" />
-            <span className="flex-1 text-left">{t('assistant')}</span>
-            <ChevronRight size={14} className="opacity-60" />
-          </button>
-        </div>
       </nav>
 
       {/* Bottom section */}

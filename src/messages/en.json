@@ -35,9 +35,11 @@
   },
   "nav": {
     "dashboard": "Dashboard",
+    "entities": "Structure & Flows",
     "receipts": "Receipts",
-    "expenses": "Expenses",
+    "expenses": "Transactions",
     "investments": "Investments",
+    "homeOffice": "Home Office",
     "taxes": "Taxes",
     "taxPayments": "Tax Payments",
     "forms": "Forms",
@@ -82,7 +84,7 @@
     "quickStats": "Quick stats",
     "avgMonthly": "Avg. monthly expenses",
     "ytdMargin": "YTD margin",
-    "noTransactions": "No transactions yet. Add your first transaction in the Expenses section.",
+    "noTransactions": "No transactions yet. Add your first transaction in the Transactions section.",
     "noChartData": "Add transactions to see your chart",
     "overviewSubtitle": "Here's a summary of your financial activity for this fiscal year.",
     "description": "Description",
@@ -110,7 +112,7 @@
     "uploadCount": "{count} file(s) uploaded"
   },
   "expenses": {
-    "title": "Expenses & Revenue",
+    "title": "Transactions",
     "addTransaction": "Add transaction",
     "type": "Type",
     "expense": "Expense",
@@ -118,6 +120,7 @@
     "dividend": "Dividend",
     "capitalGain": "Capital gain",
     "interest": "Interest",
+    "transfer": "Transfer",
     "categories": {
       "office": "Office",
       "professional": "Professional services",
@@ -141,7 +144,31 @@
     "allCategories": "All categories",
     "startDate": "Start date",
     "endDate": "End date",
-    "frequency": "Frequency"
+    "frequency": "Frequency",
+    "accounts": "Accounts",
+    "addAccount": "Add account",
+    "editAccount": "Edit account",
+    "accountType": "Account type",
+    "account": "Account",
+    "sourceAccount": "Source account",
+    "destAccount": "Destination account",
+    "checking": "Chequing account",
+    "savings": "Savings account",
+    "creditCard": "Credit card",
+    "lineOfCredit": "Line of credit",
+    "institution": "Financial institution",
+    "lastFour": "Last 4 digits",
+    "balance": "Current balance",
+    "creditLimit": "Credit limit",
+    "noAccounts": "No accounts yet. Add your first account.",
+    "transferType": "Transfer type",
+    "creditCardPayment": "Credit card payment",
+    "accountAdvance": "Account advance",
+    "interAccountTransfer": "Inter-account transfer",
+    "linkedTransaction": "Linked transaction",
+    "linkTransaction": "Link transaction",
+    "viewLinked": "View linked transaction",
+    "unlinkTransaction": "Unlink"
   },
   "investments": {
     "title": "Investments",
@@ -304,5 +331,109 @@
     "french": "Français",
     "saveChanges": "Save changes",
     "changeSaved": "Changes saved successfully"
+  },
+  "homeOffice": {
+    "title": "Home Office & Registered Address",
+    "subtitle": "Deduct the portion of home expenses used for your corporate business",
+    "addLocation": "Add location",
+    "noLocations": "No business locations configured",
+    "noLocationsDesc": "Add your home as a registered office or secondary establishment to calculate the eligible deduction.",
+    "annualDeduction": "Annual deduction",
+    "monthlyReimbursement": "Monthly reimbursement",
+    "usageRatio": "Usage ratio",
+    "officeType": {
+      "registered_office": "Registered office",
+      "secondary_establishment": "Secondary establishment",
+      "both": "Registered office + Secondary establishment"
+    },
+    "tenureType": {
+      "tenant": "Tenant",
+      "owner": "Owner"
+    },
+    "expenseTypes": {
+      "rent": "Rent",
+      "mortgage_interest": "Mortgage Interest",
+      "municipal_taxes": "Municipal Taxes",
+      "school_taxes": "School Taxes",
+      "electricity": "Electricity",
+      "gas": "Gas / Heating",
+      "home_insurance": "Home Insurance",
+      "maintenance": "Common Maintenance",
+      "other": "Other"
+    },
+    "documentTypes": {
+      "mortgage_statement": "Mortgage Statement",
+      "lease_agreement": "Lease Agreement",
+      "sublease_agreement": "Sublease Agreement",
+      "municipal_tax_bill": "Municipal Tax Bill",
+      "school_tax_bill": "School Tax Bill",
+      "electricity_bill": "Electricity Bill",
+      "gas_bill": "Gas Bill",
+      "insurance_policy": "Insurance Policy",
+      "floor_plan": "Floor Plan",
+      "other": "Other Document"
+    },
+    "fiscalWarning": "These amounts are estimates based on your data. A sublease agreement between the corporation and the shareholder is required. Consult your accountant to validate amounts before any payment.",
+    "highRatioWarning": "A usage ratio above 40% may be challenged by the CRA or Revenu Québec. Make sure the declared area is justified.",
+    "calculationExplainer": "Deduction = total eligible expenses × office area / total area",
+    "addExpense": "Add expense",
+    "viewProofs": "Documents",
+    "viewDetails": "View calculation",
+    "editLocation": "Edit location",
+    "deleteLocation": "Delete",
+    "active": "Active",
+    "inactive": "Inactive",
+    "sqft": "sq ft",
+    "totalAreaSqft": "Total home area",
+    "officeAreaSqft": "Office area",
+    "startDate": "Start date",
+    "monthsPerYear": "Months used per year",
+    "subleaseTip": "💡 Don't forget to sign a sublease agreement between the corporation and yourself as shareholder.",
+    "copyForAccountant": "Copy summary for my accountant",
+    "proofUploaded": "Document added",
+    "noProofs": "No documents added",
+    "label": "Location name",
+    "address": "Address",
+    "city": "City",
+    "postalCode": "Postal code"
+  },
+  "fiscalAdvisor": {
+    "buttonLabel": "AI Tax Advisor",
+    "panelTitle": "AI Tax Analysis",
+    "beta": "BETA",
+    "description": "In-depth analysis of your complete tax dossier based on your real financial data: tax profiles, transactions, investments, and filings.",
+    "launchAnalysis": "Run analysis",
+    "newAnalysis": "New analysis",
+    "exportPdf": "Export PDF",
+    "analyzing": "Analysis in progress...",
+    "streamingLabel": "Generating recommendations...",
+    "featureList": {
+      "immediate": "Immediate, prioritized tax recommendations",
+      "strategy": "Long-term tax optimization strategy",
+      "risks": "Tax risk identification and mitigation"
+    },
+    "steps": {
+      "collecting": "Collecting financial data...",
+      "analyzing": "Analyzing tax structure...",
+      "generating": "Generating recommendations..."
+    },
+    "sections": {
+      "summary": "Situation summary",
+      "immediate": "Immediate recommendations",
+      "longterm": "Long-term strategy",
+      "risks": "Identified risks"
+    },
+    "priority": {
+      "critical": "Critical",
+      "high": "High priority",
+      "medium": "Medium"
+    },
+    "deadline": "Deadline",
+    "references": "References",
+    "prerequisites": "Prerequisites",
+    "mitigation": "Mitigation",
+    "retry": "Retry",
+    "error": "An error occurred during analysis. Please try again.",
+    "disclaimer": "This analysis is AI-generated from your data. Consult a CPA for personalized professional advice."
   }
 }

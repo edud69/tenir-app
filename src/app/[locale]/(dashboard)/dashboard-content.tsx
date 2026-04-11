@@ -1,8 +1,15 @@
 'use client';
 
 import React, { ReactNode, useState } from 'react';
+import dynamic from 'next/dynamic';
 import Sidebar from '@/components/layout/sidebar';
 import { ChatWidget } from '@/components/assistant/chat-widget';
+import { Sparkles } from 'lucide-react';
+
+const FiscalAdvisorPanel = dynamic(
+  () => import('@/components/assistant/fiscal-advisor-panel').then((m) => ({ default: m.FiscalAdvisorPanel })),
+  { ssr: false }
+);
 
 interface DashboardContentProps {
   children: ReactNode;
@@ -19,7 +26,7 @@ export default function DashboardContent({
   locale,
   user,
 }: DashboardContentProps) {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [fiscalAdvisorOpen, setFiscalAdvisorOpen] = useState(false);
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -31,16 +38,24 @@ export default function DashboardContent({
         {children}
       </div>
 
-      {/* Mobile Menu Overlay */}
-      {mobileMenuOpen && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 md:hidden z-30"
-          onClick={() => setMobileMenuOpen(false)}
-        />
-      )}
+      {/* Fiscal Advisor trigger button — above ChatWidget bubble */}
+      <button
+        onClick={() => setFiscalAdvisorOpen(true)}
+        title={locale === 'fr' ? 'Conseiller fiscal IA' : 'AI Fiscal Advisor'}
+        className="fixed bottom-24 right-6 w-12 h-12 rounded-full bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 transition-all duration-200 flex items-center justify-center z-40"
+      >
+        <Sparkles size={20} />
+      </button>
 
       {/* AI Assistant Chat Widget */}
       <ChatWidget />
+
+      {/* Fiscal Advisor Panel */}
+      <FiscalAdvisorPanel
+        isOpen={fiscalAdvisorOpen}
+        onClose={() => setFiscalAdvisorOpen(false)}
+        locale={locale}
+      />
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { annualizeExpense } from '@/types/home-office';
 
 // 2024-2025 Canadian and Quebec tax rates
 const TAX_RATES = {
@@ -80,6 +81,84 @@ export async function POST(request: Request) {
       activeBusinessIncome = profile?.active_business_income ?? 250000;
       investmentIncome = profile?.aggregate_investment_income ?? 0;
     }
+
+    // ── Financial flows from the entities/structure module ───────────────────
+    // Find the current org's entity to scope inter-entity flows
+    const { data: currentOrgEntity } = await (supabase as any)
+      .from('entities')
+      .select('id')
+      .eq('organization_id', orgId)
+      .eq('is_current_org', true)
+      .single();
+
+    if (currentOrgEntity) {
+      const { data: flows } = await (supabase as any)
+        .from('financial_flows')
+        .select('flow_type, amount, from_entity_id, to_entity_id, status, outstanding_balance')
+        .eq('organization_id', orgId)
+        .gte('date', yearStart)
+        .lte('date', yearEnd);
+
+      if (flows && flows.length > 0) {
+        for (const flow of flows) {
+          const amt = Number(flow.amount);
+          const isFromCurrent = flow.from_entity_id === currentOrgEntity.id;
+          const isToCurrent = flow.to_entity_id === currentOrgEntity.id;
+
+          switch (flow.flow_type) {
+            case 'management_fee':
+              // Management fees received by current org = active business income
+              if (isToCurrent) activeBusinessIncome += amt;
+              break;
+            case 'dividend_eligible':
+              // Eligible dividends received from subsidiaries = investment income (inter-corp deductible)
+              if (isToCurrent) dividendsReceived += amt;
+              break;
+            case 'dividend_non_eligible':
+              if (isToCurrent) dividendsReceived += amt;
+              break;
+            case 'shareholder_loan':
+            case 'advance':
+              // Overdue shareholder loans/advances = taxable benefit s.15(2) LIR
+              if (isFromCurrent && flow.status === 'overdue') {
+                const benefit = Number(flow.outstanding_balance ?? flow.amount);
+                activeBusinessIncome += benefit; // Included as deemed income
+              }
+              break;
+          }
+        }
+      }
+    }
+
+    // Home office deduction (corporate deduction, reduces active business income)
+    let homeOfficeDeduction = 0;
+    const { data: homeOffices } = await (supabase as any)
+      .from('home_offices')
+      .select('id, total_area_sqft, office_area_sqft, months_used_per_year')
+      .eq('organization_id', orgId)
+      .eq('is_active', true);
+
+    if (homeOffices && homeOffices.length > 0) {
+      for (const office of homeOffices) {
+        const { data: officeExpenses } = await (supabase as any)
+          .from('home_office_expenses')
+          .select('amount, period_start, period_end')
+          .eq('home_office_id', office.id);
+
+        const annualTotal = (officeExpenses ?? []).reduce(
+          (sum: number, exp: { amount: number; period_start: string; period_end: string }) => {
+            return sum + annualizeExpense(Number(exp.amount), new Date(exp.period_start), new Date(exp.period_end));
+          },
+          0
+        );
+
+        const usageRatio = Number(office.office_area_sqft) / Number(office.total_area_sqft);
+        const monthsRatio = Number(office.months_used_per_year) / 12;
+        homeOfficeDeduction += annualTotal * usageRatio * monthsRatio;
+      }
+    }
+
+    activeBusinessIncome = Math.max(0, activeBusinessIncome - homeOfficeDeduction);
 
     const corporationType = profile?.corporation_type ?? 'ccpc';
     const smallBusinessLimit = profile?.small_business_limit ?? TAX_RATES.federal.smallBusinessLimit;
@@ -180,6 +259,7 @@ export async function POST(request: Request) {
         corporation_type: corporationType,
         active_business_income: Math.round(activeBusinessIncome * 100) / 100,
         aggregate_investment_income: Math.round(investmentIncome * 100) / 100,
+        home_office_deduction: Math.round(homeOfficeDeduction * 100) / 100,
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
