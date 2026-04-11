@@ -61,4 +61,4 @@ CREATE POLICY "bank_accounts_org_members" ON bank_accounts
 -- ============================================================
 CREATE TRIGGER update_bank_accounts_updated_at
   BEFORE UPDATE ON bank_accounts
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
