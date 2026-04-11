@@ -243,19 +243,24 @@ function EntityCard({
           <p className="font-semibold text-gray-900 text-sm truncate">{entity.name}</p>
           <p className="text-xs text-gray-500 mt-0.5">
             {entity.entity_type === 'individual' ? 'Particulier' : entity.corporation_type ?? 'Société'}
-            {entity.is_current_org && ' · Entité courante'}
           </p>
+          {entity.is_current_org && (
+            <span className="inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-indigo-50 text-indigo-600 border border-indigo-100">
+              <RefreshCw size={9} />
+              Synchro. Paramètres
+            </span>
+          )}
         </div>
-        <div className="flex gap-1.5">
-          <button onClick={() => onEdit(entity)} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
-            <Edit2 size={14} />
-          </button>
-          {!entity.is_current_org && (
+        {!entity.is_current_org && (
+          <div className="flex gap-1.5">
+            <button onClick={() => onEdit(entity)} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
+              <Edit2 size={14} />
+            </button>
             <button onClick={() => onDelete(entity.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
               <Trash2 size={14} />
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-2">

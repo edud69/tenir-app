@@ -1,3 +1,5 @@
+import { createServerSupabaseClient } from '@/lib/supabase/server';
+
 interface FormGenerationRequest {
   formType: 'T2' | 'CO-17' | 'T5' | 'RL-3';
   taxYear: number;
@@ -243,21 +245,116 @@ const FORM_TEMPLATES: Record<string, any> = {
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as FormGenerationRequest;
-    const { formType, taxYear, organizationId } = body;
+    const { formType, taxYear } = body;
 
-    // Validate form type
     if (!(formType in FORM_TEMPLATES)) {
       return new Response(
-        JSON.stringify({
-          error: `Unsupported form type: ${formType}. Supported types: T2, CO-17, T5, RL-3`,
-        }),
+        JSON.stringify({ error: `Unsupported form type: ${formType}. Supported: T2, CO-17, T5, RL-3` }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
+    // ── Fetch real org + tax data ─────────────────────────────────────────────
+    const supabase = await createServerSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    let orgData: any = null;
+    let taxProfile: any = null;
+    let flowData = { eligibleDividends: 0, nonEligibleDividends: 0, managementFees: 0 };
+
+    if (user) {
+      const { data: membership } = await (supabase as any)
+        .from('organization_members')
+        .select('organization_id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (membership) {
+        const orgId = membership.organization_id;
+
+        const [orgRes, profileRes, entityRes] = await Promise.all([
+          (supabase as any).from('organizations').select('*').eq('id', orgId).single(),
+          (supabase as any).from('tax_profiles').select('*').eq('organization_id', orgId).eq('tax_year', taxYear).single(),
+          (supabase as any).from('entities').select('id').eq('organization_id', orgId).eq('is_current_org', true).single(),
+        ]);
+
+        orgData = orgRes.data;
+        taxProfile = profileRes.data;
+
+        if (entityRes.data) {
+          const yearStart = `${taxYear}-01-01`;
+          const yearEnd = `${taxYear}-12-31`;
+          const { data: flows } = await (supabase as any)
+            .from('financial_flows')
+            .select('flow_type, amount, from_entity_id, to_entity_id')
+            .eq('organization_id', orgId)
+            .gte('date', yearStart)
+            .lte('date', yearEnd);
+
+          if (flows) {
+            const currentEntityId = entityRes.data.id;
+            for (const f of flows) {
+              const amt = Number(f.amount);
+              const isFrom = f.from_entity_id === currentEntityId;
+              const isTo = f.to_entity_id === currentEntityId;
+              if (f.flow_type === 'dividend_eligible' && isFrom) flowData.eligibleDividends += amt;
+              if (f.flow_type === 'dividend_non_eligible' && isFrom) flowData.nonEligibleDividends += amt;
+              if (f.flow_type === 'management_fee' && isTo) flowData.managementFees += amt;
+            }
+          }
+        }
+      }
+    }
+
+    // ── Build form with populated values ──────────────────────────────────────
     const template = FORM_TEMPLATES[formType];
 
-    // Create the response form
+    // Value lookup map per form type
+    const valueMap: Record<string, string | number | null> = {};
+
+    if (orgData) {
+      const fyEnd = `${taxYear}-${String(orgData.fiscal_year_end_month ?? 12).padStart(2, '0')}-${String(orgData.fiscal_year_end_day ?? 31).padStart(2, '0')}`;
+      // T2 / CO-17 identification
+      valueMap['1'] = orgData.business_number ?? null;
+      valueMap['2'] = orgData.name ?? null;
+      valueMap['4'] = fyEnd;
+      valueMap['100'] = orgData.neq ?? null;
+      valueMap['101'] = orgData.name ?? null;
+      valueMap['103'] = fyEnd;
+      valueMap['104'] = orgData.business_number ?? null;
+      // T5 / RL-3 payer
+      valueMap['1000'] = orgData.name ?? null;
+      valueMap['1001'] = orgData.business_number ?? null;
+      valueMap['5000'] = orgData.name ?? null;
+      valueMap['5001'] = orgData.neq ?? null;
+      valueMap['5002'] = orgData.business_number ?? null;
+    }
+
+    if (taxProfile) {
+      valueMap['10'] = taxProfile.active_business_income ?? null;
+      valueMap['30'] = taxProfile.active_business_income ?? null;
+      valueMap['60'] = taxProfile.taxable_income ?? null;
+      valueMap['61'] = taxProfile.federal_tax ?? null;
+      valueMap['64'] = taxProfile.provincial_tax ?? null;
+      valueMap['65'] = taxProfile.total_tax ?? null;
+      // CO-17
+      valueMap['200'] = taxProfile.active_business_income ?? null;
+      valueMap['220'] = taxProfile.active_business_income ?? null;
+      valueMap['500'] = taxProfile.taxable_income ?? null;
+      valueMap['501'] = taxProfile.provincial_tax ?? null;
+      valueMap['503'] = taxProfile.provincial_tax ?? null;
+    }
+
+    // Flow-derived values
+    if (flowData.eligibleDividends > 0 || flowData.nonEligibleDividends > 0) {
+      valueMap['40'] = (flowData.eligibleDividends + flowData.nonEligibleDividends) || null; // T2 dividend income
+      valueMap['300'] = flowData.eligibleDividends || null;   // CO-17
+      valueMap['301'] = flowData.nonEligibleDividends || null;
+      valueMap['3000'] = (flowData.eligibleDividends + flowData.nonEligibleDividends) || null; // T5
+      valueMap['7000'] = flowData.eligibleDividends || null;  // RL-3
+      valueMap['7001'] = flowData.nonEligibleDividends || null;
+    }
+
     const generatedForm: GeneratedForm = {
       formType,
       formCode: template.code,
@@ -265,56 +362,28 @@ export async function POST(request: Request) {
       status: 'draft',
       generatedAt: new Date().toISOString(),
       fields: [],
-      sections: template.sections.map(
-        (section: {
-          name: string;
-          fields: Array<{ code: string; label: string; type: string }>;
-        }) => ({
-          name: section.name,
-          fields: section.fields.map((field) => ({
-            code: field.code,
-            label: field.label,
-            value: null,
-            type: field.type,
-          })),
-        })
-      ),
+      sections: template.sections.map((section: { name: string; fields: Array<{ code: string; label: string; type: string }> }) => ({
+        name: section.name,
+        fields: section.fields.map((field) => ({
+          code: field.code,
+          label: field.label,
+          value: valueMap[field.code] ?? null,
+          type: field.type,
+        })),
+      })),
     };
 
-    // Flatten fields for the top-level fields array
     generatedForm.fields = generatedForm.sections.flatMap((section) => section.fields);
 
-    // In a real implementation, you would:
-    // 1. Fetch organization data from database
-    // 2. Populate the form fields with actual data
-    // 3. Store the form in the database
-    // For MVP, return the structure with empty values
-
-    const response = {
-      ...generatedForm,
-      notes: [
-        'This is a draft form structure. Fields are empty and ready for population.',
-        `Tax year: ${taxYear}`,
-        'In a production environment, this would be populated with actual organizational data.',
-        'For specific accounting guidance, consult with a CPA or tax professional.',
-      ],
-    };
-
-    return new Response(JSON.stringify(response), {
+    return new Response(JSON.stringify(generatedForm), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (error) {
     console.error('Error in form generation API:', error);
     return new Response(
-      JSON.stringify({
-        error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      }),
-      {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      }
+      JSON.stringify({ error: 'Internal server error', message: error instanceof Error ? error.message : 'Unknown error' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
 }

@@ -16,6 +16,19 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Block editing the current org entity — it syncs from org settings
+    const { data: target } = await (supabase as any)
+      .from('entities')
+      .select('is_current_org')
+      .eq('id', id)
+      .single();
+    if (target?.is_current_org) {
+      return NextResponse.json(
+        { error: 'The current organization entity is managed by app settings and cannot be edited here.' },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
 
     // Only allow updating safe fields
@@ -58,6 +71,19 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Block deleting the current org entity
+    const { data: target } = await (supabase as any)
+      .from('entities')
+      .select('is_current_org')
+      .eq('id', id)
+      .single();
+    if (target?.is_current_org) {
+      return NextResponse.json(
+        { error: 'The current organization entity cannot be deleted.' },
+        { status: 403 }
+      );
     }
 
     const { error } = await (supabase as any)

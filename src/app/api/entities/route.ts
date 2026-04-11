@@ -25,7 +25,7 @@ export async function GET() {
     const orgId = membership.organization_id;
     const db = supabase as any;
 
-    const { data: entities, error } = await db
+    let { data: entities, error } = await db
       .from('entities')
       .select('*')
       .eq('organization_id', orgId)
@@ -33,6 +33,62 @@ export async function GET() {
       .order('name', { ascending: true });
 
     if (error) throw error;
+
+    // ── Auto-sync current org entity from organization settings ──────────────
+    const { data: org } = await (supabase as any)
+      .from('organizations')
+      .select('name, neq, business_number, province, incorporation_date')
+      .eq('id', orgId)
+      .single();
+
+    if (org) {
+      const currentOrgEntity = (entities ?? []).find((e: any) => e.is_current_org);
+      const syncPayload = {
+        organization_id: orgId,
+        name: org.name,
+        entity_type: 'corporation',
+        corporation_type: 'ccpc',
+        neq: org.neq ?? null,
+        business_number: org.business_number ?? null,
+        incorporation_date: org.incorporation_date ?? null,
+        province: org.province ?? 'QC',
+        is_current_org: true,
+        is_shareholder: false,
+      };
+
+      if (!currentOrgEntity) {
+        await (supabase as any).from('entities').insert(syncPayload);
+      } else {
+        const needsUpdate =
+          currentOrgEntity.name !== org.name ||
+          currentOrgEntity.neq !== (org.neq ?? null) ||
+          currentOrgEntity.business_number !== (org.business_number ?? null) ||
+          currentOrgEntity.province !== (org.province ?? 'QC');
+        if (needsUpdate) {
+          await (supabase as any).from('entities').update({
+            name: org.name,
+            neq: org.neq ?? null,
+            business_number: org.business_number ?? null,
+            province: org.province ?? 'QC',
+          }).eq('id', currentOrgEntity.id);
+        }
+      }
+
+      if (!currentOrgEntity || (currentOrgEntity && (
+        currentOrgEntity.name !== org.name ||
+        currentOrgEntity.neq !== (org.neq ?? null) ||
+        currentOrgEntity.business_number !== (org.business_number ?? null) ||
+        currentOrgEntity.province !== (org.province ?? 'QC')
+      ))) {
+        const { data: refreshed } = await db
+          .from('entities')
+          .select('*')
+          .eq('organization_id', orgId)
+          .order('entity_type', { ascending: true })
+          .order('name', { ascending: true });
+        entities = refreshed;
+      }
+    }
 
     return NextResponse.json({ entities: entities ?? [] });
   } catch (err: any) {
