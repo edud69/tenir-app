@@ -16,6 +16,7 @@ import {
   Plus, Edit2, Trash2, ArrowUpRight, ArrowDownLeft, Paperclip, Upload,
   Link2, Unlink, FileText, ImageOff, Loader2, CheckCircle, X,
   CreditCard, Landmark, ArrowLeftRight, PiggyBank, Banknote,
+  RefreshCw, Wifi, Copy,
 } from 'lucide-react';
 import { useOrganization } from '@/hooks/useOrganization';
 import { createClient } from '@/lib/supabase/client';
@@ -444,6 +445,12 @@ interface Transaction {
   account_id?: string | null;
   linked_transaction_id?: string | null;
   transfer_type?: TransferType | null;
+  // Plaid fields
+  sync_source?: 'manual' | 'plaid';
+  plaid_transaction_id?: string | null;
+  is_duplicate?: boolean;
+  duplicate_of_id?: string | null;
+  pending?: boolean;
 }
 
 const categoryOptions = [
@@ -886,6 +893,16 @@ function TransactionDetailModal({
             <span className={cn('text-xs font-semibold px-2.5 py-1 rounded-full capitalize', typeColors[tx.type] || 'text-gray-600 bg-gray-100')}>
               {tx.type === 'capital_gain' ? 'Gain en capital' : tx.type === 'transfer' ? 'Transfert' : tx.type}
             </span>
+            {tx.sync_source === 'plaid' && (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-[#00B8D9]/10 text-[#00B8D9]">
+                <Wifi size={10} /> Plaid
+              </span>
+            )}
+            {tx.is_duplicate && (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-50 text-amber-600">
+                <Copy size={10} /> Doublon possible
+              </span>
+            )}
             {tx.receipt_id && (
               <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full bg-tenir-50 text-tenir-600">
                 <Paperclip size={10} /> Reçu
@@ -1047,11 +1064,17 @@ export default function ExpensesPage() {
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [editAccount, setEditAccount] = useState<BankAccount | null>(null);
 
+  // Plaid sync
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ added: number; modified: number } | null>(null);
+  const [hasPlaidItems, setHasPlaidItems] = useState(false);
+
   // Filters
   const [searchQuery, setSearchQuery] = useState<string>(() => searchParams.get('search') ?? '');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [accountFilter, setAccountFilter] = useState<string>('all');
+  const [showDuplicates, setShowDuplicates] = useState<boolean>(false);
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
 
   useEffect(() => {
@@ -1072,8 +1095,56 @@ export default function ExpensesPage() {
       setBankAccounts(data || []);
       setAccountsLoading(false);
     }
+    async function checkPlaidItems() {
+      const { data } = await (supabase as any)
+        .from('plaid_items')
+        .select('id')
+        .eq('organization_id', orgId)
+        .eq('is_active', true)
+        .limit(1);
+      setHasPlaidItems((data || []).length > 0);
+    }
     fetchAccounts();
+    checkPlaidItems();
   }, [orgId]);
+
+  const handlePlaidSync = async () => {
+    if (!user) return;
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) return;
+
+      const res = await fetch('/api/plaid/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSyncResult({ added: data.added, modified: data.modified });
+        // Refresh transactions
+        const { data: freshTxs } = await (supabase as any)
+          .from('transactions')
+          .select('*')
+          .eq('organization_id', orgId)
+          .order('date', { ascending: false });
+        if (freshTxs) setTransactions(freshTxs);
+        // Refresh accounts (balances may have changed)
+        const { data: freshAccs } = await (supabase as any)
+          .from('bank_accounts')
+          .select('*')
+          .eq('organization_id', orgId)
+          .eq('is_active', true)
+          .order('created_at', { ascending: true });
+        if (freshAccs) setBankAccounts(freshAccs);
+      }
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   useEffect(() => {
     if (!orgId) return;
@@ -1102,6 +1173,7 @@ export default function ExpensesPage() {
     if (typeFilter !== 'all' && tx.type !== typeFilter) return false;
     if (categoryFilter !== 'all' && tx.category !== categoryFilter) return false;
     if (accountFilter !== 'all' && tx.account_id !== accountFilter) return false;
+    if (showDuplicates && !tx.is_duplicate) return false;
     if (dateRange.start && tx.date < dateRange.start) return false;
     if (dateRange.end && tx.date > dateRange.end) return false;
     if (searchQuery) {
@@ -1113,6 +1185,8 @@ export default function ExpensesPage() {
     }
     return true;
   });
+
+  const duplicateCount = transactions.filter((tx) => tx.is_duplicate).length;
 
   // ── Summaries ──────────────────────────────────────────────────────────────
   const totalExpenses = transactions
@@ -1344,18 +1418,50 @@ export default function ExpensesPage() {
             <SummaryCard title="Déductible" value={taxDeductible} isNegative subtitle="Pour déclaration fiscale" />
           </div>
 
+          {/* ── Plaid Sync Result ───────────────────────────────────────────── */}
+          {syncResult && (
+            <div className="mb-4 flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-sm text-emerald-700">
+              <CheckCircle size={15} />
+              Synchronisation terminée — {syncResult.added} transaction(s) ajoutée(s), {syncResult.modified} modifiée(s)
+              <button onClick={() => setSyncResult(null)} className="ml-auto text-emerald-400 hover:text-emerald-600">
+                <X size={14} />
+              </button>
+            </div>
+          )}
+
           {/* ── Accounts Section ────────────────────────────────────────────── */}
           <div className="mb-8">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-semibold text-gray-900">{t('accounts')}</h2>
-              <Button
-                variant="outline"
-                size="sm"
-                icon={<Plus size={14} />}
-                onClick={() => { setEditAccount(null); setIsAccountModalOpen(true); }}
-              >
-                {t('addAccount')}
-              </Button>
+              <div className="flex items-center gap-3">
+                <h2 className="text-base font-semibold text-gray-900">{t('accounts')}</h2>
+                {hasPlaidItems && (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-[#00B8D9] bg-[#00B8D9]/10 px-2 py-0.5 rounded-full">
+                    <Wifi size={10} />
+                    Plaid connecté
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {hasPlaidItems && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    icon={syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                    onClick={handlePlaidSync}
+                    disabled={syncing}
+                  >
+                    {syncing ? 'Sync…' : 'Synchroniser'}
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  icon={<Plus size={14} />}
+                  onClick={() => { setEditAccount(null); setIsAccountModalOpen(true); }}
+                >
+                  {t('addAccount')}
+                </Button>
+              </div>
             </div>
 
             {accountsLoading ? (
@@ -1474,6 +1580,24 @@ export default function ExpensesPage() {
             </CardContent>
           </Card>
 
+          {/* ── Duplicate Warning ───────────────────────────────────────────── */}
+          {duplicateCount > 0 && (
+            <div className="mb-4 flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+              <Copy size={15} className="text-amber-600 flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-amber-800">
+                  {duplicateCount} doublon(s) détecté(s) — transactions manuelles qui correspondent à des transactions synchronisées.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowDuplicates(!showDuplicates)}
+                className="text-xs font-medium text-amber-700 hover:text-amber-900 border border-amber-300 px-2.5 py-1 rounded-lg"
+              >
+                {showDuplicates ? 'Voir tout' : 'Voir doublons'}
+              </button>
+            </div>
+          )}
+
           {/* ── Add Transaction ─────────────────────────────────────────────── */}
           <div className="mb-6">
             <Button
@@ -1520,6 +1644,16 @@ export default function ExpensesPage() {
                               <div>
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <p className="font-medium text-gray-900">{tx.description}</p>
+                                  {tx.sync_source === 'plaid' && (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-[#00B8D9]/10 text-[#00B8D9] border border-[#00B8D9]/20">
+                                      <Wifi size={9} />
+                                    </span>
+                                  )}
+                                  {tx.is_duplicate && (
+                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-amber-50 text-amber-600 border border-amber-200">
+                                      <Copy size={9} /> doublon
+                                    </span>
+                                  )}
                                   {tx.receipt_id && (
                                     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-tenir-50 text-tenir-600 border border-tenir-100">
                                       <Paperclip size={9} />

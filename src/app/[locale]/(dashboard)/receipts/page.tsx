@@ -80,6 +80,8 @@ interface TxItem {
   type: string;
   receipt_id: string | null;
   vendor?: string | null;
+  sync_source?: string | null;
+  plaid_transaction_id?: string | null;
 }
 
 type UploadStatus = 'uploading' | 'processing' | 'creating' | 'done' | 'error';
@@ -634,7 +636,7 @@ export default function ReceiptsPage() {
     setDataLoading(true);
     const [rRes, tRes] = await Promise.all([
       (supabase as any).from('receipts').select('*').eq('organization_id', orgId).order('created_at', { ascending: false }),
-      (supabase as any).from('transactions').select('id,description,amount,date,category,type,receipt_id,vendor').eq('organization_id', orgId).order('date', { ascending: false }),
+      (supabase as any).from('transactions').select('id,description,amount,date,category,type,receipt_id,vendor,sync_source,plaid_transaction_id').eq('organization_id', orgId).order('date', { ascending: false }),
     ]);
 
     const txList: TxItem[] = tRes.data || [];
@@ -656,15 +658,25 @@ export default function ReceiptsPage() {
    */
   function findMatchingTx(receipt: ReceiptItem): TxItem | null {
     if (!receipt.amount && !receipt.date) return null;
-    return transactions.find((tx) => {
+
+    const candidates = transactions.filter((tx) => {
       if (tx.receipt_id) return false; // already linked
-      if (tx.type !== 'expense') return false;
-      const amountMatch = receipt.amount != null && Math.abs(Math.abs(tx.amount) - receipt.amount) < 0.02;
-      const dateMatch   = receipt.date && tx.date === receipt.date;
+      const amountMatch = receipt.amount != null && Math.abs(Math.abs(tx.amount) - receipt.amount) <= Math.max(0.05 * receipt.amount, 0.02);
+      // Allow up to 3 days window for Plaid transactions (may be posted on different date)
+      let dateMatch = false;
+      if (receipt.date && tx.date) {
+        const diff = Math.abs(new Date(receipt.date).getTime() - new Date(tx.date).getTime());
+        dateMatch = diff <= 3 * 24 * 60 * 60 * 1000;
+      }
       const vendorMatch = receipt.vendor && tx.vendor && receipt.vendor.toLowerCase() === tx.vendor.toLowerCase();
-      // Strong match: amount + date, or vendor + date
-      return (amountMatch && dateMatch) || (vendorMatch && dateMatch);
-    }) ?? null;
+      return (amountMatch && dateMatch) || (vendorMatch && dateMatch && amountMatch);
+    });
+
+    if (candidates.length === 0) return null;
+
+    // Prefer Plaid-synced transactions (already posted from bank)
+    const plaidMatch = candidates.find((tx) => tx.sync_source === 'plaid');
+    return plaidMatch || candidates[0];
   }
 
   /**

@@ -15,9 +15,9 @@ import {
   Globe,
   Globe2,
   Mail,
-  Landmark,
   Check,
 } from 'lucide-react';
+import { PlaidLinkButton } from '@/components/plaid/PlaidLinkButton';
 import { useOrganization } from '@/hooks/useOrganization';
 import { createClient } from '@/lib/supabase/client';
 
@@ -404,6 +404,32 @@ function IntegrationsTab() {
 
   return (
     <div className="space-y-6">
+      {/* Plaid Bank Connection */}
+      <Card padding="md" shadow="sm">
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#00B8D9]/10 flex items-center justify-center flex-shrink-0">
+              {/* Plaid logo approximation */}
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="text-[#00B8D9]">
+                <rect x="2" y="2" width="9" height="9" rx="1.5" fill="currentColor" opacity="1"/>
+                <rect x="13" y="2" width="9" height="9" rx="1.5" fill="currentColor" opacity="0.7"/>
+                <rect x="2" y="13" width="9" height="9" rx="1.5" fill="currentColor" opacity="0.7"/>
+                <rect x="13" y="13" width="9" height="9" rx="1.5" fill="currentColor" opacity="0.4"/>
+              </svg>
+            </div>
+            <div>
+              <CardTitle level="h3">{t('bankConnection')}</CardTitle>
+              <p className="text-sm text-gray-600 mt-1">
+                Connectez vos comptes bancaires et cartes de crédit via Plaid pour importer automatiquement vos transactions.
+              </p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <PlaidLinkButton />
+        </CardContent>
+      </Card>
+
       {/* Google Drive Integration */}
       <Card padding="md" shadow="sm">
         <CardHeader>
@@ -447,26 +473,6 @@ function IntegrationsTab() {
               Activer
             </Button>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Bank Connection */}
-      <Card padding="md" shadow="sm">
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <Landmark size={24} className="text-orange-600" />
-            <div>
-              <CardTitle level="h3">{t('bankConnection')}</CardTitle>
-              <p className="text-sm text-gray-600 mt-1">
-                Importez vos transactions bancaires automatiquement (bientôt disponible)
-              </p>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Button variant="outline" disabled>
-            {t('connectBank')}
-          </Button>
         </CardContent>
       </Card>
     </div>
