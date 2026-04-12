@@ -16,7 +16,9 @@ import {
   Plus, TrendingUp, DollarSign, ArrowUpRight, ArrowDownLeft, Trash2, Edit2,
   Building2, Home, ChevronDown, ChevronRight, Users, MapPin, Link2, Unlink,
   CheckCircle, AlertCircle, RefreshCw, Wifi, WifiOff, Search, X, Loader2,
+  Landmark, Receipt, PercentCircle, Upload, FileSpreadsheet, Sparkles,
 } from 'lucide-react';
+import type { ImportedInvestment } from '@/app/api/investments/import/route';
 import type { QuoteResult } from '@/app/api/investments/quote/route';
 import type { SymbolSuggestion } from '@/app/api/investments/search/route';
 import { createClient } from '@/lib/supabase/client';
@@ -70,6 +72,17 @@ interface RentalProperty {
   purchase_date: string | null;
   notes: string | null;
   created_at: string;
+  // Mortgage fields
+  mortgage_lender: string | null;
+  mortgage_original_amount: number | null;
+  mortgage_balance: number | null;
+  mortgage_interest_rate: number | null;
+  mortgage_amortization_years: number | null;
+  mortgage_term_years: number | null;
+  mortgage_start_date: string | null;
+  mortgage_payment_frequency: string | null;
+  mortgage_payment_amount: number | null;
+  building_value_pct: number | null;
 }
 
 interface RentalUnit {
@@ -93,6 +106,17 @@ interface RentTransaction {
   vendor: string | null;
   property_id: string | null;
   category: string;
+}
+
+interface ExpenseTransaction {
+  id: string;
+  date: string;
+  description: string;
+  amount: number;
+  vendor: string | null;
+  property_id: string | null;
+  category: string;
+  type: string;
 }
 
 // ─── Investment Modal ─────────────────────────────────────────────────────────
@@ -352,11 +376,276 @@ function InvestmentModal({ isOpen, onClose, onSubmit, initialData }: {
   );
 }
 
+// ─── Import Investments Modal ─────────────────────────────────────────────────
+
+type ImportPhase = 'idle' | 'parsing' | 'preview' | 'importing' | 'done' | 'error';
+
+const TYPE_OPTIONS = [
+  { value: 'stock', label: 'Action' }, { value: 'etf', label: 'FNB/ETF' },
+  { value: 'mutual_fund', label: 'Fonds commun' }, { value: 'bond', label: 'Obligation' },
+  { value: 'gic', label: 'CPG' }, { value: 'other', label: 'Autre' },
+];
+
+function ImportInvestmentsModal({ isOpen, onClose, onImport }: {
+  isOpen: boolean;
+  onClose: () => void;
+  onImport: (investments: ImportedInvestment[]) => Promise<void>;
+}) {
+  const [phase, setPhase] = useState<ImportPhase>('idle');
+  const [rows, setRows] = useState<(ImportedInvestment & { selected: boolean })[]>([]);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+  const [fileName, setFileName] = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setPhase('idle');
+      setRows([]);
+      setErrMsg(null);
+      setFileName('');
+    }
+  }, [isOpen]);
+
+  async function handleFile(file: File) {
+    setFileName(file.name);
+    setPhase('parsing');
+    setErrMsg(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/investments/import', { method: 'POST', body: fd });
+      const text = await res.text();
+      let data: any;
+      try { data = JSON.parse(text); } catch { throw new Error(text || 'Import failed'); }
+      if (!res.ok) throw new Error(data.error || 'Import failed');
+      setRows((data.investments as ImportedInvestment[]).map((inv) => ({
+        ...inv,
+        shares: Number(inv.shares) || 0,
+        purchase_price: Number(inv.purchase_price) || 0,
+        selected: true,
+      })));
+      setPhase('preview');
+    } catch (e: any) {
+      setErrMsg(e.message || 'Erreur');
+      setPhase('error');
+    }
+  }
+
+  async function handleConfirm() {
+    const selected = rows.filter((r) => r.selected);
+    if (!selected.length) return;
+    setPhase('importing');
+    try {
+      await onImport(selected);
+      setPhase('done');
+    } catch (e: any) {
+      setErrMsg(e.message);
+      setPhase('error');
+    }
+  }
+
+  const toggleRow = (i: number) => setRows((prev) => prev.map((r, idx) => idx === i ? { ...r, selected: !r.selected } : r));
+  const toggleAll = (v: boolean) => setRows((prev) => prev.map((r) => ({ ...r, selected: v })));
+  const selectedCount = rows.filter((r) => r.selected).length;
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-tenir-50 flex items-center justify-center">
+              <Sparkles size={16} className="text-tenir-600" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">Importer des placements</h2>
+              <p className="text-xs text-gray-400 mt-0.5">PDF, Excel, CSV, OFX — l'IA normalise automatiquement</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400">✕</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6">
+
+          {/* ── Idle: dropzone ── */}
+          {phase === 'idle' && (
+            <div
+              className="border-2 border-dashed border-gray-200 rounded-2xl p-12 text-center cursor-pointer hover:border-tenir-300 hover:bg-tenir-50/30 transition-all"
+              onClick={() => fileRef.current?.click()}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
+            >
+              <input ref={fileRef} type="file"
+                accept=".pdf,.xlsx,.xls,.xlsm,.csv,.txt,.ofx,.qfx,.tsv"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+              <FileSpreadsheet size={36} className="mx-auto text-gray-300 mb-4" />
+              <p className="font-semibold text-gray-700 mb-1">Glisser-déposer ou cliquer pour choisir</p>
+              <p className="text-sm text-gray-400">PDF · Excel (xlsx/xls) · CSV · OFX/QFX · TXT</p>
+              <p className="text-xs text-gray-300 mt-2">Relevé de courtage, export portefeuille, historique de transactions…</p>
+            </div>
+          )}
+
+          {/* ── Parsing ── */}
+          {phase === 'parsing' && (
+            <div className="text-center py-16">
+              <div className="w-14 h-14 rounded-2xl bg-tenir-50 border border-tenir-100 flex items-center justify-center mx-auto mb-4">
+                <Sparkles size={24} className="text-tenir-500 animate-pulse" />
+              </div>
+              <p className="font-semibold text-gray-800 mb-1">Analyse en cours…</p>
+              <p className="text-sm text-gray-400">{fileName}</p>
+              <p className="text-xs text-gray-300 mt-2">L'IA extrait et normalise les données de placement</p>
+            </div>
+          )}
+
+          {/* ── Error ── */}
+          {phase === 'error' && (
+            <div className="text-center py-12">
+              <AlertCircle size={36} className="mx-auto text-red-400 mb-3" />
+              <p className="font-semibold text-gray-800 mb-1">Échec de l'analyse</p>
+              <p className="text-sm text-red-500 mb-6">{errMsg}</p>
+              <button onClick={() => setPhase('idle')} className="text-sm text-tenir-600 hover:text-tenir-700 font-medium">
+                ← Réessayer avec un autre fichier
+              </button>
+            </div>
+          )}
+
+          {/* ── Done ── */}
+          {phase === 'done' && (
+            <div className="text-center py-12">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center mx-auto mb-4">
+                <CheckCircle size={24} className="text-emerald-500" />
+              </div>
+              <p className="font-semibold text-gray-800 mb-1">Import réussi</p>
+              <p className="text-sm text-gray-500">{selectedCount} placement{selectedCount > 1 ? 's' : ''} ajouté{selectedCount > 1 ? 's' : ''} au portefeuille</p>
+            </div>
+          )}
+
+          {/* ── Importing ── */}
+          {phase === 'importing' && (
+            <div className="text-center py-12">
+              <Loader2 size={32} className="mx-auto text-tenir-500 animate-spin mb-3" />
+              <p className="font-semibold text-gray-800">Ajout des placements…</p>
+            </div>
+          )}
+
+          {/* ── Preview table ── */}
+          {phase === 'preview' && (
+            <>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="font-semibold text-gray-800">{rows.length} placement{rows.length > 1 ? 's' : ''} détecté{rows.length > 1 ? 's' : ''}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Vérifiez les données avant de confirmer l'import</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => toggleAll(true)} className="text-xs text-tenir-600 hover:text-tenir-700 font-medium">Tout sélectionner</button>
+                  <button onClick={() => toggleAll(false)} className="text-xs text-gray-400 hover:text-gray-600 font-medium">Tout désélectionner</button>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-gray-100">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th className="w-8 px-3 py-2.5"></th>
+                      <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Symbole / Nom</th>
+                      <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Type</th>
+                      <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Titres</th>
+                      <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Prix/titre</th>
+                      <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Date</th>
+                      <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Devise · Compte</th>
+                      <th className="text-center px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Fiabilité</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {rows.map((row, i) => (
+                      <tr key={i} className={cn('transition-colors', row.selected ? 'bg-white hover:bg-gray-50' : 'bg-gray-50/50 opacity-50')}>
+                        <td className="px-3 py-2.5">
+                          <input type="checkbox" checked={row.selected} onChange={() => toggleRow(i)}
+                            className="w-4 h-4 text-tenir-600 rounded accent-tenir-500" />
+                        </td>
+                        <td className="px-3 py-2.5">
+                          {row.symbol && <span className="font-bold text-tenir-600 text-xs mr-1.5">{row.symbol}</span>}
+                          <span className="text-gray-700 text-xs">{row.name}</span>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                            {TYPE_OPTIONS.find((t) => t.value === row.type)?.label ?? row.type}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-right font-mono text-xs text-gray-800">{(row.shares ?? 0).toLocaleString('fr-CA', { maximumFractionDigits: 4 })}</td>
+                        <td className="px-3 py-2.5 text-right font-mono text-xs text-gray-800">{formatCurrency(row.purchase_price ?? 0)}</td>
+                        <td className="px-3 py-2.5 text-xs text-gray-500">{row.purchase_date ?? '—'}</td>
+                        <td className="px-3 py-2.5 text-xs text-gray-500">
+                          {row.currency}
+                          {row.account_type && <span className="ml-1 text-gray-300">· {row.account_type}</span>}
+                        </td>
+                        <td className="px-3 py-2.5 text-center">
+                          <span className={cn('text-xs px-1.5 py-0.5 rounded-full font-medium',
+                            row.confidence === 'high' ? 'bg-emerald-50 text-emerald-600' :
+                            row.confidence === 'medium' ? 'bg-amber-50 text-amber-600' :
+                            'bg-red-50 text-red-500'
+                          )}>
+                            {row.confidence === 'high' ? 'Élevée' : row.confidence === 'medium' ? 'Moyenne' : 'Faible'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-xs text-gray-400 mt-3">
+                Les entrées à fiabilité faible ou moyenne méritent une vérification. Vous pourrez modifier chaque placement après l'import.
+              </p>
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        {phase === 'preview' && (
+          <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between flex-shrink-0">
+            <button onClick={() => setPhase('idle')} className="text-sm text-gray-400 hover:text-gray-600">← Changer de fichier</button>
+            <div className="flex gap-3">
+              <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 font-medium">Annuler</button>
+              <button
+                onClick={handleConfirm}
+                disabled={selectedCount === 0}
+                className={cn('px-5 py-2 rounded-xl text-sm font-semibold transition-all', selectedCount > 0 ? 'bg-tenir-500 text-white hover:bg-tenir-600' : 'bg-gray-100 text-gray-400 cursor-not-allowed')}
+              >
+                Importer {selectedCount > 0 ? `(${selectedCount})` : ''}
+              </button>
+            </div>
+          </div>
+        )}
+        {phase === 'done' && (
+          <div className="px-6 py-4 border-t border-gray-100 flex justify-end flex-shrink-0">
+            <button onClick={onClose} className="px-5 py-2 rounded-xl text-sm font-semibold bg-tenir-500 text-white hover:bg-tenir-600 transition-all">Fermer</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Property Modal ───────────────────────────────────────────────────────────
 
 interface PropertyFormData {
   address: string; city: string; province: string; postal_code: string;
   nickname: string; property_type: string; purchase_price: string; purchase_date: string; notes: string;
+  building_value_pct: string;
+  // Mortgage
+  has_mortgage: boolean;
+  mortgage_lender: string;
+  mortgage_original_amount: string;
+  mortgage_balance: string;
+  mortgage_interest_rate: string;
+  mortgage_amortization_years: string;
+  mortgage_term_years: string;
+  mortgage_start_date: string;
+  mortgage_payment_frequency: string;
+  mortgage_payment_amount: string;
 }
 
 function PropertyModal({ isOpen, onClose, onSubmit, initialData }: {
@@ -364,41 +653,98 @@ function PropertyModal({ isOpen, onClose, onSubmit, initialData }: {
   onSubmit: (data: PropertyFormData) => void;
   initialData?: Partial<PropertyFormData>;
 }) {
-  const [fd, setFd] = useState<PropertyFormData>({
+  const blank: PropertyFormData = {
     address: '', city: '', province: 'QC', postal_code: '',
     nickname: '', property_type: 'residential', purchase_price: '', purchase_date: '', notes: '',
-    ...initialData,
-  });
-  useEffect(() => { if (initialData) setFd((p) => ({ ...p, ...initialData })); }, [isOpen]);
+    building_value_pct: '80',
+    has_mortgage: false,
+    mortgage_lender: '', mortgage_original_amount: '', mortgage_balance: '',
+    mortgage_interest_rate: '', mortgage_amortization_years: '', mortgage_term_years: '',
+    mortgage_start_date: '', mortgage_payment_frequency: 'monthly', mortgage_payment_amount: '',
+  };
+  const [fd, setFd] = useState<PropertyFormData>({ ...blank, ...initialData });
+  useEffect(() => { setFd({ ...blank, ...initialData }); }, [isOpen]);
+
+  const f = (key: keyof PropertyFormData, val: any) => setFd((p) => ({ ...p, [key]: val }));
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={initialData?.address ? 'Modifier l\'immeuble' : 'Ajouter un immeuble'} size="lg"
+    <Modal isOpen={isOpen} onClose={onClose} title={initialData?.address ? "Modifier l'immeuble" : 'Ajouter un immeuble'} size="lg"
       footer={<div className="flex gap-3"><Button variant="ghost" fullWidth onClick={onClose}>Annuler</Button><Button variant="primary" fullWidth onClick={() => { onSubmit(fd); onClose(); }}>Enregistrer</Button></div>}>
       <div className="space-y-4">
+        {/* Address */}
         <div className="grid grid-cols-3 gap-4">
           <div className="col-span-2">
-            <Input label="Adresse civique" value={fd.address} onChange={(e) => setFd({ ...fd, address: e.target.value })} placeholder="123 rue Principale" required />
+            <Input label="Adresse civique" value={fd.address} onChange={(e) => f('address', e.target.value)} placeholder="123 rue Principale" required />
           </div>
-          <Input label="Surnom (optionnel)" value={fd.nickname} onChange={(e) => setFd({ ...fd, nickname: e.target.value })} placeholder="Duplex Laval" />
+          <Input label="Surnom (optionnel)" value={fd.nickname} onChange={(e) => f('nickname', e.target.value)} placeholder="Duplex Laval" />
         </div>
         <div className="grid grid-cols-3 gap-4">
-          <Input label="Ville" value={fd.city} onChange={(e) => setFd({ ...fd, city: e.target.value })} placeholder="Montréal" />
-          <Select label="Province" value={fd.province} onChange={(v) => setFd({ ...fd, province: v as string })}
+          <Input label="Ville" value={fd.city} onChange={(e) => f('city', e.target.value)} placeholder="Montréal" />
+          <Select label="Province" value={fd.province} onChange={(v) => f('province', v as string)}
             options={['QC','ON','BC','AB','MB','SK','NS','NB','NL','PE'].map((p) => ({ value: p, label: p }))} />
-          <Input label="Code postal" value={fd.postal_code} onChange={(e) => setFd({ ...fd, postal_code: e.target.value })} placeholder="H1A 1A1" />
+          <Input label="Code postal" value={fd.postal_code} onChange={(e) => f('postal_code', e.target.value)} placeholder="H1A 1A1" />
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <Select label="Type de propriété" value={fd.property_type} onChange={(v) => setFd({ ...fd, property_type: v as string })}
+          <Select label="Type de propriété" value={fd.property_type} onChange={(v) => f('property_type', v as string)}
             options={[
               { value: 'residential', label: 'Résidentiel (unifamilial)' },
               { value: 'multi_unit', label: 'Multilogement (duplex/triplex…)' },
               { value: 'condo', label: 'Condo' },
               { value: 'commercial', label: 'Commercial' },
             ]} />
-          <Input label="Date d'acquisition" type="date" value={fd.purchase_date} onChange={(e) => setFd({ ...fd, purchase_date: e.target.value })} />
+          <Input label="Date d'acquisition" type="date" value={fd.purchase_date} onChange={(e) => f('purchase_date', e.target.value)} />
         </div>
-        <Input label="Prix d'achat" type="number" step="0.01" value={fd.purchase_price} onChange={(e) => setFd({ ...fd, purchase_price: e.target.value })} placeholder="0.00" />
-        <Input label="Notes" value={fd.notes} onChange={(e) => setFd({ ...fd, notes: e.target.value })} />
+        <div className="grid grid-cols-2 gap-4">
+          <Input label="Prix d'achat ($)" type="number" step="0.01" value={fd.purchase_price} onChange={(e) => f('purchase_price', e.target.value)} placeholder="0.00" />
+          <Input label="% valeur bâtiment (CCA)" type="number" min="0" max="100" step="1" value={fd.building_value_pct}
+            onChange={(e) => f('building_value_pct', e.target.value)} helperText="Part de l'immeuble excluant le terrain (défaut 80%)" />
+        </div>
+        <Input label="Notes" value={fd.notes} onChange={(e) => f('notes', e.target.value)} />
+
+        {/* Mortgage toggle */}
+        <div className="border-t border-gray-100 pt-4">
+          <label className="flex items-center gap-3 cursor-pointer select-none">
+            <div className={`relative w-10 h-5 rounded-full transition-colors ${fd.has_mortgage ? 'bg-tenir-500' : 'bg-gray-200'}`}
+              onClick={() => f('has_mortgage', !fd.has_mortgage)}>
+              <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${fd.has_mortgage ? 'translate-x-5' : ''}`} />
+            </div>
+            <span className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+              <Landmark size={14} className="text-gray-400" /> Hypothèque sur cet immeuble
+            </span>
+          </label>
+        </div>
+
+        {fd.has_mortgage && (
+          <div className="space-y-4 p-4 bg-blue-50/50 rounded-xl border border-blue-100">
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="Prêteur" value={fd.mortgage_lender} onChange={(e) => f('mortgage_lender', e.target.value)} placeholder="Banque Nationale, Desjardins…" />
+              <Input label="Date de début" type="date" value={fd.mortgage_start_date} onChange={(e) => f('mortgage_start_date', e.target.value)} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Input label="Montant original ($)" type="number" step="0.01" value={fd.mortgage_original_amount} onChange={(e) => f('mortgage_original_amount', e.target.value)} placeholder="350 000" />
+              <Input label="Solde actuel ($)" type="number" step="0.01" value={fd.mortgage_balance} onChange={(e) => f('mortgage_balance', e.target.value)} placeholder="298 000" />
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <Input label="Taux d'intérêt (%)" type="number" step="0.01" value={fd.mortgage_interest_rate}
+                onChange={(e) => f('mortgage_interest_rate', e.target.value)} placeholder="5.25" helperText="Taux nominal annuel" />
+              <Input label="Amortissement (ans)" type="number" step="1" value={fd.mortgage_amortization_years}
+                onChange={(e) => f('mortgage_amortization_years', e.target.value)} placeholder="25" />
+              <Input label="Terme (ans)" type="number" step="1" value={fd.mortgage_term_years}
+                onChange={(e) => f('mortgage_term_years', e.target.value)} placeholder="5" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Select label="Fréquence des paiements" value={fd.mortgage_payment_frequency}
+                onChange={(v) => f('mortgage_payment_frequency', v as string)}
+                options={[
+                  { value: 'monthly', label: 'Mensuel (12×/an)' },
+                  { value: 'biweekly', label: 'Aux 2 semaines (26×/an)' },
+                  { value: 'weekly', label: 'Hebdomadaire (52×/an)' },
+                ]} />
+              <Input label="Montant par paiement ($)" type="number" step="0.01" value={fd.mortgage_payment_amount}
+                onChange={(e) => f('mortgage_payment_amount', e.target.value)} placeholder="1 650" />
+            </div>
+          </div>
+        )}
       </div>
     </Modal>
   );
@@ -507,6 +853,94 @@ function LinkRentModal({ property, unlinkedIncome, onClose, onLink, onUnlink }: 
   );
 }
 
+// ─── Link Expense Modal ───────────────────────────────────────────────────────
+
+function LinkExpenseModal({ property, unlinkedExpenses, onClose, onLink, onUnlink }: {
+  property: RentalProperty;
+  unlinkedExpenses: ExpenseTransaction[];
+  onClose: () => void;
+  onLink: (txId: string) => void;
+  onUnlink: (txId: string) => void;
+}) {
+  const [search, setSearch] = useState('');
+  const filtered = unlinkedExpenses.filter((tx) => {
+    const q = search.toLowerCase();
+    return !q || tx.description.toLowerCase().includes(q) || (tx.vendor || '').toLowerCase().includes(q) || tx.category.toLowerCase().includes(q);
+  });
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">Lier des dépenses</h2>
+            <p className="text-xs text-gray-400 mt-0.5">{property.nickname || property.address}</p>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400">✕</button>
+        </div>
+        <div className="px-6 pt-4 pb-2">
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Rechercher une dépense…"
+            className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl bg-gray-50 focus:outline-none focus:ring-2 focus:ring-tenir-400/30 focus:border-tenir-400" />
+        </div>
+        <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-1.5 mt-2">
+          {filtered.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-8">Aucune dépense non liée trouvée</p>
+          ) : (
+            filtered.map((tx) => (
+              <button key={tx.id} onClick={() => onLink(tx.id)}
+                className="w-full flex items-center gap-3 p-3 rounded-xl border border-gray-100 hover:border-red-200 hover:bg-red-50/30 transition-all text-left group">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">{tx.description}</p>
+                  <p className="text-xs text-gray-400">{tx.date} · {tx.category}{tx.vendor ? ` · ${tx.vendor}` : ''}</p>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-sm font-bold text-red-600">{formatCurrency(Math.abs(tx.amount))}</p>
+                  <span className="text-xs text-tenir-500 font-medium opacity-0 group-hover:opacity-100 transition-opacity">Lier →</span>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── CCA helper ───────────────────────────────────────────────────────────────
+
+function calcCCA(purchasePrice: number | null, buildingPct: number, purchaseDate: string | null) {
+  if (!purchasePrice || !purchaseDate) return null;
+  const buildingCost = purchasePrice * (buildingPct / 100);
+  const acquired = new Date(purchaseDate);
+  const now = new Date();
+  // Number of completed tax years since acquisition
+  let yearsHeld = now.getFullYear() - acquired.getFullYear();
+  if (now.getMonth() < acquired.getMonth() || (now.getMonth() === acquired.getMonth() && now.getDate() < acquired.getDate())) {
+    yearsHeld -= 1;
+  }
+
+  // Year of acquisition: half-year rule — only 50% of 4% = 2%
+  if (yearsHeld <= 0) {
+    return { buildingCost, ucc: buildingCost, annualCCA: buildingCost * 0.02, yearsHeld: 0 };
+  }
+  // Year 1: apply half-year rate; subsequent years: full 4% declining balance
+  let ucc = buildingCost * (1 - 0.02);
+  for (let i = 1; i < yearsHeld; i++) ucc *= (1 - 0.04);
+  return { buildingCost, ucc, annualCCA: ucc * 0.04, yearsHeld };
+}
+
+// Mortgage payment breakdown (Canadian semi-annual compounding)
+function calcMortgageBreakdown(balance: number, annualRatePct: number, frequency: string, payment: number) {
+  const periodsPerYear = frequency === 'weekly' ? 52 : frequency === 'biweekly' ? 26 : 12;
+  const r = annualRatePct / 100;
+  const effectiveRate = Math.pow(1 + r / 2, 2 / periodsPerYear) - 1;
+  const interest = balance * effectiveRate;
+  const principal = Math.max(0, payment - interest);
+  const annualInterest = interest * periodsPerYear;
+  const annualPrincipal = principal * periodsPerYear;
+  return { interest, principal, annualInterest, annualPrincipal };
+}
+
 // ─── Property Card ────────────────────────────────────────────────────────────
 
 const PROPERTY_TYPE_LABELS: Record<string, string> = {
@@ -514,11 +948,14 @@ const PROPERTY_TYPE_LABELS: Record<string, string> = {
 };
 
 function PropertyCard({
-  property, units, linkedTx, onAddUnit, onEditUnit, onDeleteUnit, onDeleteProperty, onEditProperty, onLinkRent, onUnlinkRent,
+  property, units, linkedTx, linkedExpenses,
+  onAddUnit, onEditUnit, onDeleteUnit, onDeleteProperty, onEditProperty,
+  onLinkRent, onUnlinkRent, onLinkExpense, onUnlinkExpense,
 }: {
   property: RentalProperty;
   units: RentalUnit[];
   linkedTx: RentTransaction[];
+  linkedExpenses: ExpenseTransaction[];
   onAddUnit: (propertyId: string) => void;
   onEditUnit: (unit: RentalUnit) => void;
   onDeleteUnit: (unitId: string) => void;
@@ -526,6 +963,8 @@ function PropertyCard({
   onEditProperty: (property: RentalProperty) => void;
   onLinkRent: (property: RentalProperty) => void;
   onUnlinkRent: (txId: string) => void;
+  onLinkExpense: (property: RentalProperty) => void;
+  onUnlinkExpense: (txId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
   const totalExpected = units.filter((u) => !u.is_vacant).reduce((s, u) => s + u.monthly_rent, 0);
@@ -533,6 +972,23 @@ function PropertyCard({
   const pct = totalExpected > 0 ? Math.min(100, (totalReceived / totalExpected) * 100) : 0;
   const activeUnits = units.filter((u) => !u.is_vacant).length;
   const vacantUnits = units.filter((u) => u.is_vacant).length;
+
+  // Mortgage breakdown
+  const hasMortgage = !!(property.mortgage_balance && property.mortgage_interest_rate && property.mortgage_payment_amount);
+  const mortgageBreakdown = hasMortgage
+    ? calcMortgageBreakdown(
+        property.mortgage_balance!,
+        property.mortgage_interest_rate!,
+        property.mortgage_payment_frequency || 'monthly',
+        property.mortgage_payment_amount!,
+      )
+    : null;
+
+  // CCA
+  const cca = calcCCA(property.purchase_price, property.building_value_pct ?? 80, property.purchase_date);
+
+  // Linked expenses totals
+  const totalExpenses = linkedExpenses.reduce((s, tx) => s + Math.abs(tx.amount), 0);
 
   return (
     <Card padding="none" shadow="sm" className="bg-white overflow-hidden">
@@ -560,6 +1016,10 @@ function PropertyCard({
             <button onClick={() => onLinkRent(property)} title="Lier des loyers"
               className="p-1.5 rounded-lg hover:bg-tenir-50 text-gray-400 hover:text-tenir-600 transition-colors">
               <Link2 size={14} />
+            </button>
+            <button onClick={() => onLinkExpense(property)} title="Lier des dépenses"
+              className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors">
+              <Receipt size={14} />
             </button>
             <button onClick={() => onAddUnit(property.id)} title="Ajouter une unité"
               className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors">
@@ -669,10 +1129,10 @@ function PropertyCard({
             </div>
           )}
 
-          {/* Linked transactions */}
+          {/* Linked rent transactions */}
           {linkedTx.length > 0 && (
             <div className="border-t border-gray-50 pt-3">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Paiements liés</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Revenus de loyer liés</p>
               <div className="space-y-1">
                 {linkedTx.map((tx) => (
                   <div key={tx.id} className="flex items-center justify-between text-sm py-1.5 px-2 rounded-lg hover:bg-gray-50 group">
@@ -689,6 +1149,116 @@ function PropertyCard({
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Mortgage section ── */}
+          {hasMortgage && mortgageBreakdown && (
+            <div className="border-t border-gray-100 pt-4 mt-2">
+              <div className="flex items-center gap-2 mb-3">
+                <Landmark size={13} className="text-blue-400" />
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Hypothèque</p>
+                {property.mortgage_lender && <span className="text-xs text-gray-400">· {property.mortgage_lender}</span>}
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-blue-50 rounded-xl px-3 py-2.5">
+                  <p className="text-xs text-blue-400 mb-0.5">Solde actuel</p>
+                  <p className="text-sm font-bold text-blue-700">{formatCurrency(property.mortgage_balance!)}</p>
+                </div>
+                <div className="bg-gray-50 rounded-xl px-3 py-2.5">
+                  <p className="text-xs text-gray-400 mb-0.5">Paiement ({property.mortgage_payment_frequency === 'biweekly' ? 'aux 2 sem.' : property.mortgage_payment_frequency === 'weekly' ? 'hebdo.' : 'mensuel'})</p>
+                  <p className="text-sm font-bold text-gray-800">{formatCurrency(property.mortgage_payment_amount!)}</p>
+                </div>
+                <div className="bg-amber-50 rounded-xl px-3 py-2.5">
+                  <p className="text-xs text-amber-500 mb-0.5">Intérêts / paiement</p>
+                  <p className="text-sm font-bold text-amber-700">{formatCurrency(mortgageBreakdown.interest)}</p>
+                  <p className="text-xs text-amber-400">{formatCurrency(mortgageBreakdown.annualInterest)} / an</p>
+                </div>
+                <div className="bg-emerald-50 rounded-xl px-3 py-2.5">
+                  <p className="text-xs text-emerald-500 mb-0.5">Capital / paiement</p>
+                  <p className="text-sm font-bold text-emerald-700">{formatCurrency(mortgageBreakdown.principal)}</p>
+                  <p className="text-xs text-emerald-400">{formatCurrency(mortgageBreakdown.annualPrincipal)} / an</p>
+                </div>
+              </div>
+              {property.mortgage_interest_rate && (
+                <p className="text-xs text-gray-400 mt-2">
+                  Taux {property.mortgage_interest_rate}% · Amortissement {property.mortgage_amortization_years} ans · Terme {property.mortgage_term_years} ans
+                  {' · '}Intérêts déductibles si immeuble locatif
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* ── Linked expenses ── */}
+          <div className="border-t border-gray-100 pt-4 mt-2">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Receipt size={13} className="text-red-400" />
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Dépenses liées</p>
+                {linkedExpenses.length > 0 && (
+                  <span className="text-xs text-red-600 font-semibold">{formatCurrency(totalExpenses)} total</span>
+                )}
+              </div>
+              <button onClick={() => onLinkExpense(property)}
+                className="text-xs text-tenir-600 hover:text-tenir-700 font-medium flex items-center gap-1">
+                <Plus size={10} /> Lier
+              </button>
+            </div>
+            {linkedExpenses.length === 0 ? (
+              <p className="text-xs text-gray-400 py-2">Aucune dépense liée — liez des dépenses (entretien, taxes, assurances…)</p>
+            ) : (
+              <div className="space-y-1">
+                {linkedExpenses.map((tx) => (
+                  <div key={tx.id} className="flex items-center justify-between text-sm py-1.5 px-2 rounded-lg hover:bg-gray-50 group">
+                    <div className="min-w-0 flex-1">
+                      <span className="text-gray-700 truncate">{tx.description}</span>
+                      <span className="text-gray-400 text-xs ml-2">{tx.date} · {tx.category}</span>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="font-semibold text-red-500">{formatCurrency(Math.abs(tx.amount))}</span>
+                      <button onClick={() => onUnlinkExpense(tx.id)} title="Délier"
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-all">
+                        <Unlink size={11} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── CCA / Amortissement ── */}
+          {cca && (
+            <div className="border-t border-gray-100 pt-4 mt-2">
+              <div className="flex items-center gap-2 mb-3">
+                <PercentCircle size={13} className="text-purple-400" />
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Amortissement (CCA)</p>
+                <span className="text-xs px-1.5 py-0.5 rounded-full bg-purple-50 text-purple-600 font-medium">Classe 1 · 4%</span>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-purple-50 rounded-xl px-3 py-2.5">
+                  <p className="text-xs text-purple-400 mb-0.5">Coût du bâtiment</p>
+                  <p className="text-sm font-bold text-purple-700">{formatCurrency(cca.buildingCost)}</p>
+                  <p className="text-xs text-purple-400">{property.building_value_pct ?? 80}% du prix d'achat</p>
+                </div>
+                <div className="bg-purple-50 rounded-xl px-3 py-2.5">
+                  <p className="text-xs text-purple-400 mb-0.5">FNACC actuelle</p>
+                  <p className="text-sm font-bold text-purple-700">{formatCurrency(cca.ucc)}</p>
+                  <p className="text-xs text-purple-400">Après {cca.yearsHeld} an{cca.yearsHeld !== 1 ? 's' : ''}</p>
+                </div>
+                <div className="bg-purple-50 rounded-xl px-3 py-2.5">
+                  <p className="text-xs text-purple-400 mb-0.5">DPA max cette année</p>
+                  <p className="text-sm font-bold text-purple-700">{formatCurrency(cca.annualCCA)}</p>
+                  {cca.yearsHeld === 0 && <p className="text-xs text-purple-400">Règle demi-année</p>}
+                </div>
+              </div>
+              <div className="mt-2 p-3 bg-amber-50 rounded-xl border border-amber-100">
+                <p className="text-xs text-amber-700 leading-relaxed">
+                  <strong>Note fiscale :</strong> La DPA (déduction pour amortissement) est optionnelle et ne peut créer une perte locative.
+                  Le terrain ({100 - (property.building_value_pct ?? 80)}% estimé) n'est pas amortissable.
+                  En cas de vente, la récupération d'amortissement est imposable comme revenu ordinaire.
+                </p>
               </div>
             </div>
           )}
@@ -732,6 +1302,7 @@ export default function InvestmentsPage() {
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [dividends, setDividends] = useState<DividendRecord[]>([]);
   const [isInvModalOpen, setIsInvModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [editInvestment, setEditInvestment] = useState<(InvestmentFormData & { id: string }) | null>(null);
   const [quotes, setQuotes] = useState<Record<string, QuoteResult>>({});
   const [quotesLoading, setQuotesLoading] = useState(false);
@@ -742,25 +1313,33 @@ export default function InvestmentsPage() {
   const [properties, setProperties] = useState<RentalProperty[]>([]);
   const [units, setUnits] = useState<RentalUnit[]>([]);
   const [rentTx, setRentTx] = useState<RentTransaction[]>([]);
+  const [expenseTx, setExpenseTx] = useState<ExpenseTransaction[]>([]);
   const [showPropertyModal, setShowPropertyModal] = useState(false);
   const [editProperty, setEditProperty] = useState<RentalProperty | null>(null);
   const [showUnitModal, setShowUnitModal] = useState<{ propertyId: string; unit?: RentalUnit } | null>(null);
   const [linkRentProperty, setLinkRentProperty] = useState<RentalProperty | null>(null);
+  const [linkExpenseProperty, setLinkExpenseProperty] = useState<RentalProperty | null>(null);
 
   const [dataLoading, setDataLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Plaid brokerage sync
+  const [plaidSyncing, setPlaidSyncing] = useState(false);
+  const [plaidSyncResult, setPlaidSyncResult] = useState<{ synced: number } | null>(null);
+  const [plaidSyncError, setPlaidSyncError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!orgId) return;
     setDataLoading(true);
     setError(null);
     try {
-      const [invRes, divRes, propRes, unitRes, txRes] = await Promise.all([
+      const [invRes, divRes, propRes, unitRes, txRes, expRes] = await Promise.all([
         (supabase as any).from('investments').select('*').eq('organization_id', orgId).eq('sold', false).order('created_at', { ascending: false }),
         (supabase as any).from('dividend_records').select('*').eq('organization_id', orgId).order('date', { ascending: false }),
         (supabase as any).from('rental_properties').select('*').eq('organization_id', orgId).order('created_at', { ascending: false }),
         (supabase as any).from('rental_units').select('*').order('unit_number'),
-        (supabase as any).from('transactions').select('id,date,description,amount,vendor,property_id,category').eq('organization_id', orgId).eq('type', 'income').order('date', { ascending: false }),
+        (supabase as any).from('transactions').select('id,date,description,amount,vendor,property_id,category,type').eq('organization_id', orgId).eq('type', 'income').order('date', { ascending: false }),
+        (supabase as any).from('transactions').select('id,date,description,amount,vendor,property_id,category,type').eq('organization_id', orgId).eq('type', 'expense').order('date', { ascending: false }),
       ]);
       if (invRes.error) throw invRes.error;
       if (propRes.error) throw propRes.error;
@@ -769,6 +1348,7 @@ export default function InvestmentsPage() {
       setProperties(propRes.data || []);
       setUnits(unitRes.data || []);
       setRentTx(txRes.data || []);
+      setExpenseTx((expRes as any).data || []);
     } catch (e: any) {
       setError(e.message || 'Erreur de chargement');
     } finally {
@@ -849,6 +1429,29 @@ export default function InvestmentsPage() {
     }
   }, [investments]);
 
+  const handlePlaidInvestmentsSync = async () => {
+    setPlaidSyncing(true);
+    setPlaidSyncResult(null);
+    setPlaidSyncError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error('Non authentifié');
+      const res = await fetch('/api/plaid/investments-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({}),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Erreur de synchronisation');
+      setPlaidSyncResult({ synced: json.synced });
+      await fetchData();
+    } catch (e: any) {
+      setPlaidSyncError(e.message);
+    } finally {
+      setPlaidSyncing(false);
+    }
+  };
+
   const handleAddInvestment = async (data: InvestmentFormData) => {
     if (!orgId) return;
     const { error } = await (supabase as any).from('investments').insert({
@@ -859,6 +1462,28 @@ export default function InvestmentsPage() {
     });
     if (error) setError(error.message);
     else fetchData();
+  };
+
+  const handleBulkImport = async (imports: ImportedInvestment[]) => {
+    if (!orgId) return;
+    const rows = imports.map((inv) => ({
+      organization_id: orgId,
+      symbol: inv.symbol ?? 'N/A',
+      name: inv.name,
+      type: inv.type,
+      shares: inv.shares,
+      purchase_price: inv.purchase_price,
+      purchase_date: inv.purchase_date ?? new Date().toISOString().split('T')[0],
+      adjusted_cost_base: inv.purchase_price,
+      current_price: null,
+      currency: inv.currency,
+      account_type: inv.account_type || null,
+      notes: null,
+      sold: false,
+    }));
+    const { error } = await (supabase as any).from('investments').insert(rows);
+    if (error) throw new Error(error.message);
+    await fetchData();
   };
 
   const handleUpdateInvestment = async (data: InvestmentFormData) => {
@@ -899,6 +1524,25 @@ export default function InvestmentsPage() {
 
   // ── Handlers — Properties ─────────────────────────────────────────────────
 
+  function mortgagePayload(data: PropertyFormData) {
+    if (!data.has_mortgage) return {
+      mortgage_lender: null, mortgage_original_amount: null, mortgage_balance: null,
+      mortgage_interest_rate: null, mortgage_amortization_years: null, mortgage_term_years: null,
+      mortgage_start_date: null, mortgage_payment_frequency: null, mortgage_payment_amount: null,
+    };
+    return {
+      mortgage_lender: data.mortgage_lender || null,
+      mortgage_original_amount: data.mortgage_original_amount ? parseFloat(data.mortgage_original_amount) : null,
+      mortgage_balance: data.mortgage_balance ? parseFloat(data.mortgage_balance) : null,
+      mortgage_interest_rate: data.mortgage_interest_rate ? parseFloat(data.mortgage_interest_rate) : null,
+      mortgage_amortization_years: data.mortgage_amortization_years ? parseInt(data.mortgage_amortization_years) : null,
+      mortgage_term_years: data.mortgage_term_years ? parseInt(data.mortgage_term_years) : null,
+      mortgage_start_date: data.mortgage_start_date || null,
+      mortgage_payment_frequency: data.mortgage_payment_frequency || 'monthly',
+      mortgage_payment_amount: data.mortgage_payment_amount ? parseFloat(data.mortgage_payment_amount) : null,
+    };
+  }
+
   const handleAddProperty = async (data: PropertyFormData) => {
     if (!orgId) return;
     const { error } = await (supabase as any).from('rental_properties').insert({
@@ -908,6 +1552,8 @@ export default function InvestmentsPage() {
       property_type: data.property_type,
       purchase_price: data.purchase_price ? parseFloat(data.purchase_price) : null,
       purchase_date: data.purchase_date || null, notes: data.notes || null,
+      building_value_pct: data.building_value_pct ? parseFloat(data.building_value_pct) : 80,
+      ...mortgagePayload(data),
     });
     if (error) setError(error.message);
     else fetchData();
@@ -923,14 +1569,12 @@ export default function InvestmentsPage() {
         property_type: data.property_type,
         purchase_price: data.purchase_price ? parseFloat(data.purchase_price) : null,
         purchase_date: data.purchase_date || null, notes: data.notes || null,
+        building_value_pct: data.building_value_pct ? parseFloat(data.building_value_pct) : 80,
+        ...mortgagePayload(data),
       })
       .eq('id', editProperty.id);
     if (error) { setError(error.message); return; }
-    setProperties((prev) => prev.map((p) =>
-      p.id === editProperty.id
-        ? { ...p, ...data, purchase_price: data.purchase_price ? parseFloat(data.purchase_price) : null }
-        : p
-    ));
+    fetchData();
     setEditProperty(null);
   };
 
@@ -977,6 +1621,16 @@ export default function InvestmentsPage() {
   const handleUnlinkRent = async (txId: string) => {
     await (supabase as any).from('transactions').update({ property_id: null }).eq('id', txId);
     setRentTx((prev) => prev.map((tx) => tx.id === txId ? { ...tx, property_id: null } : tx));
+  };
+
+  const handleLinkExpense = async (txId: string, propertyId: string) => {
+    await (supabase as any).from('transactions').update({ property_id: propertyId }).eq('id', txId);
+    setExpenseTx((prev) => prev.map((tx) => tx.id === txId ? { ...tx, property_id: propertyId } : tx));
+  };
+
+  const handleUnlinkExpense = async (txId: string) => {
+    await (supabase as any).from('transactions').update({ property_id: null }).eq('id', txId);
+    setExpenseTx((prev) => prev.map((tx) => tx.id === txId ? { ...tx, property_id: null } : tx));
   };
 
   const isLoading = orgLoading || dataLoading;
@@ -1037,9 +1691,44 @@ export default function InvestmentsPage() {
                 <PortfolioSummaryCard title={t('dividendIncome')} value={formatCurrency(ytdDividends)} subtitle="Cumulatif reçu" icon={DollarSign} />
               </div>
 
+              {/* Plaid sync result / error banners */}
+              {plaidSyncResult && (
+                <div className="mb-4 flex items-center gap-2 p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-sm text-emerald-700">
+                  <CheckCircle size={14} />
+                  {plaidSyncResult.synced > 0
+                    ? `${plaidSyncResult.synced} position(s) synchronisée(s) depuis votre courtage`
+                    : 'Synchronisation terminée — aucune nouvelle position détectée'}
+                  <button onClick={() => setPlaidSyncResult(null)} className="ml-auto text-emerald-400 hover:text-emerald-600">
+                    <X size={13} />
+                  </button>
+                </div>
+              )}
+              {plaidSyncError && (
+                <div className="mb-4 flex items-center gap-2 p-3 bg-amber-50 border border-amber-100 rounded-xl text-sm text-amber-700">
+                  <AlertCircle size={14} />
+                  {plaidSyncError}
+                  <button onClick={() => setPlaidSyncError(null)} className="ml-auto"><X size={13} /></button>
+                </div>
+              )}
+
               {/* Refresh bar */}
               <div className="flex items-center justify-between mb-6">
-                <Button variant="primary" icon={<Plus size={18} />} onClick={() => setIsInvModalOpen(true)}>{t('addInvestment')}</Button>
+                <div className="flex items-center gap-2">
+                  <Button variant="primary" icon={<Plus size={18} />} onClick={() => setIsInvModalOpen(true)}>{t('addInvestment')}</Button>
+                  <button onClick={() => setIsImportModalOpen(true)}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium border border-tenir-200 text-tenir-600 bg-tenir-50 hover:bg-tenir-100 transition-all">
+                    <Upload size={15} /> Importer
+                  </button>
+                  <button
+                    onClick={handlePlaidInvestmentsSync}
+                    disabled={plaidSyncing}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium border border-[#00B8D9]/40 text-[#00B8D9] bg-[#00B8D9]/5 hover:bg-[#00B8D9]/10 transition-all disabled:opacity-50"
+                  >
+                    {plaidSyncing
+                      ? <><Loader2 size={14} className="animate-spin" /> Sync courtage…</>
+                      : <><Wifi size={14} /> Sync courtage</>}
+                  </button>
+                </div>
                 <div className="flex items-center gap-3">
                   {quotesError && (
                     <div className="flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 border border-amber-100 px-3 py-1.5 rounded-xl">
@@ -1253,6 +1942,7 @@ export default function InvestmentsPage() {
                       property={prop}
                       units={units.filter((u) => u.property_id === prop.id)}
                       linkedTx={rentTx.filter((tx) => tx.property_id === prop.id)}
+                      linkedExpenses={expenseTx.filter((tx) => tx.property_id === prop.id)}
                       onAddUnit={(pid) => setShowUnitModal({ propertyId: pid })}
                       onEditUnit={(unit) => setShowUnitModal({ propertyId: unit.property_id, unit })}
                       onDeleteUnit={handleDeleteUnit}
@@ -1260,6 +1950,8 @@ export default function InvestmentsPage() {
                       onEditProperty={(p) => setEditProperty(p)}
                       onLinkRent={(p) => setLinkRentProperty(p)}
                       onUnlinkRent={handleUnlinkRent}
+                      onLinkExpense={(p) => setLinkExpenseProperty(p)}
+                      onUnlinkExpense={handleUnlinkExpense}
                     />
                   ))}
                 </div>
@@ -1271,6 +1963,12 @@ export default function InvestmentsPage() {
 
       {/* Modals */}
       <InvestmentModal isOpen={isInvModalOpen} onClose={() => setIsInvModalOpen(false)} onSubmit={handleAddInvestment} />
+
+      <ImportInvestmentsModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onImport={handleBulkImport}
+      />
 
       {editInvestment && (
         <InvestmentModal
@@ -1298,6 +1996,17 @@ export default function InvestmentsPage() {
             purchase_price: editProperty.purchase_price != null ? String(editProperty.purchase_price) : '',
             purchase_date:  editProperty.purchase_date ?? '',
             notes:          editProperty.notes ?? '',
+            building_value_pct: editProperty.building_value_pct != null ? String(editProperty.building_value_pct) : '80',
+            has_mortgage:               editProperty.mortgage_balance != null,
+            mortgage_lender:            editProperty.mortgage_lender ?? '',
+            mortgage_original_amount:   editProperty.mortgage_original_amount != null ? String(editProperty.mortgage_original_amount) : '',
+            mortgage_balance:           editProperty.mortgage_balance != null ? String(editProperty.mortgage_balance) : '',
+            mortgage_interest_rate:     editProperty.mortgage_interest_rate != null ? String(editProperty.mortgage_interest_rate) : '',
+            mortgage_amortization_years: editProperty.mortgage_amortization_years != null ? String(editProperty.mortgage_amortization_years) : '',
+            mortgage_term_years:        editProperty.mortgage_term_years != null ? String(editProperty.mortgage_term_years) : '',
+            mortgage_start_date:        editProperty.mortgage_start_date ?? '',
+            mortgage_payment_frequency: editProperty.mortgage_payment_frequency ?? 'monthly',
+            mortgage_payment_amount:    editProperty.mortgage_payment_amount != null ? String(editProperty.mortgage_payment_amount) : '',
           }}
         />
       )}
@@ -1328,6 +2037,16 @@ export default function InvestmentsPage() {
           onClose={() => setLinkRentProperty(null)}
           onLink={(txId) => { handleLinkRent(txId, linkRentProperty.id); }}
           onUnlink={handleUnlinkRent}
+        />
+      )}
+
+      {linkExpenseProperty && (
+        <LinkExpenseModal
+          property={linkExpenseProperty}
+          unlinkedExpenses={expenseTx.filter((tx) => !tx.property_id)}
+          onClose={() => setLinkExpenseProperty(null)}
+          onLink={(txId) => { handleLinkExpense(txId, linkExpenseProperty.id); }}
+          onUnlink={handleUnlinkExpense}
         />
       )}
     </div>
