@@ -16,8 +16,9 @@ import {
   Plus, Edit2, Trash2, ArrowUpRight, ArrowDownLeft, Paperclip, Upload,
   Link2, Unlink, FileText, ImageOff, Loader2, CheckCircle, X,
   CreditCard, Landmark, ArrowLeftRight, PiggyBank, Banknote,
-  RefreshCw, Wifi, Copy,
+  RefreshCw, Wifi, Copy, ChevronDown, ChevronUp,
 } from 'lucide-react';
+import { PlaidLinkButton } from '@/components/plaid/PlaidLinkButton';
 import { useOrganization } from '@/hooks/useOrganization';
 import { createClient } from '@/lib/supabase/client';
 
@@ -1068,6 +1069,7 @@ export default function ExpensesPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{ added: number; modified: number } | null>(null);
   const [hasPlaidItems, setHasPlaidItems] = useState(false);
+  const [showPlaidPanel, setShowPlaidPanel] = useState(false);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState<string>(() => searchParams.get('search') ?? '');
@@ -1456,6 +1458,14 @@ export default function ExpensesPage() {
                 <Button
                   variant="outline"
                   size="sm"
+                  icon={showPlaidPanel ? <ChevronUp size={14} /> : <Wifi size={14} />}
+                  onClick={() => setShowPlaidPanel(!showPlaidPanel)}
+                >
+                  {hasPlaidItems ? 'Gérer Plaid' : 'Connecter via Plaid'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
                   icon={<Plus size={14} />}
                   onClick={() => { setEditAccount(null); setIsAccountModalOpen(true); }}
                 >
@@ -1464,16 +1474,52 @@ export default function ExpensesPage() {
               </div>
             </div>
 
+            {/* Plaid inline panel */}
+            {showPlaidPanel && (
+              <div className="mb-4 p-4 border border-[#00B8D9]/30 bg-[#00B8D9]/5 rounded-2xl">
+                <PlaidLinkButton onConnected={async () => {
+                  // Refresh accounts + plaid status after connect/sync
+                  const { data } = await (supabase as any)
+                    .from('bank_accounts')
+                    .select('*')
+                    .eq('organization_id', orgId)
+                    .eq('is_active', true)
+                    .order('created_at', { ascending: true });
+                  if (data) setBankAccounts(data);
+                  const { data: items } = await (supabase as any)
+                    .from('plaid_items')
+                    .select('id')
+                    .eq('organization_id', orgId)
+                    .eq('is_active', true)
+                    .limit(1);
+                  setHasPlaidItems((items || []).length > 0);
+                  // Refresh transactions
+                  const { data: freshTxs } = await (supabase as any)
+                    .from('transactions')
+                    .select('*')
+                    .eq('organization_id', orgId)
+                    .order('date', { ascending: false });
+                  if (freshTxs) setTransactions(freshTxs);
+                }} />
+              </div>
+            )}
+
             {accountsLoading ? (
               <div className="flex items-center gap-2 text-sm text-gray-400 py-4">
                 <Loader2 size={16} className="animate-spin" /> Chargement des comptes…
               </div>
-            ) : bankAccounts.length === 0 ? (
+            ) : bankAccounts.length === 0 && !showPlaidPanel ? (
               <div className="p-6 border-2 border-dashed border-gray-200 rounded-2xl text-center">
                 <Landmark size={28} className="text-gray-300 mx-auto mb-2" />
-                <p className="text-sm text-gray-500">{t('noAccounts')}</p>
+                <p className="text-sm text-gray-500 mb-3">{t('noAccounts')}</p>
+                <button
+                  onClick={() => setShowPlaidPanel(true)}
+                  className="inline-flex items-center gap-2 text-sm font-medium text-[#00B8D9] hover:text-[#0099b8] transition-colors"
+                >
+                  <Wifi size={14} /> Connecter via Plaid
+                </button>
               </div>
-            ) : (
+            ) : bankAccounts.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                 {bankAccounts.map((acc) => {
                   const isCreditType = acc.type === 'credit_card' || acc.type === 'line_of_credit';
@@ -1516,7 +1562,7 @@ export default function ExpensesPage() {
                   );
                 })}
               </div>
-            )}
+            ) : null}
           </div>
 
           {/* ── Filters ────────────────────────────────────────────────────── */}
