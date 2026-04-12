@@ -252,22 +252,96 @@ function CompanyInfoTab({
   );
 }
 
-function TaxProfileTab({ onSave }: { onSave: () => void }) {
+function TaxProfileTab({
+  orgId,
+  onSave,
+}: {
+  orgId: string | null;
+  onSave: () => void;
+}) {
   const t = useTranslations('settings');
   const commonT = useTranslations('common');
+  const supabase = createClient();
+  const currentYear = new Date().getFullYear();
+
   const [formData, setFormData] = useState<TaxFormData>({
     corporationType: 'ccpc',
     smallBusinessLimit: '500000',
     gripBalance: '0',
     cdaBalance: '0',
   });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Load existing tax profile for current year
+  useEffect(() => {
+    if (!orgId) return;
+    (async () => {
+      setLoading(true);
+      const { data } = await (supabase as any)
+        .from('tax_profiles')
+        .select('corporation_type, small_business_limit, grip_balance, cda_balance')
+        .eq('organization_id', orgId)
+        .eq('tax_year', currentYear)
+        .single();
+      if (data) {
+        setFormData({
+          corporationType: data.corporation_type ?? 'ccpc',
+          smallBusinessLimit: String(data.small_business_limit ?? 500000),
+          gripBalance: String(data.grip_balance ?? 0),
+          cdaBalance: String(data.cda_balance ?? 0),
+        });
+      }
+      setLoading(false);
+    })();
+  }, [orgId]);
 
   const handleChange = (field: keyof TaxFormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleSave = async () => {
+    if (!orgId) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const payload = {
+        organization_id: orgId,
+        tax_year: currentYear,
+        corporation_type: formData.corporationType,
+        small_business_limit: parseFloat(formData.smallBusinessLimit) || 500000,
+        grip_balance: parseFloat(formData.gripBalance) || 0,
+        cda_balance: parseFloat(formData.cdaBalance) || 0,
+      };
+      const { error } = await (supabase as any)
+        .from('tax_profiles')
+        .upsert(payload, { onConflict: 'organization_id,tax_year' });
+      if (error) throw error;
+      onSave();
+    } catch (e: any) {
+      setSaveError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="w-6 h-6 border-2 border-tenir-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      {saveError && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+          {saveError}
+        </div>
+      )}
+
       <Select
         label={t('corporationType')}
         options={corporationTypes}
@@ -281,11 +355,14 @@ function TaxProfileTab({ onSave }: { onSave: () => void }) {
         value={formData.smallBusinessLimit}
         onChange={(e) => handleChange('smallBusinessLimit', e.target.value)}
         placeholder="500000"
-        helperText="Annual federal small business deduction limit"
+        helperText="Plafond annuel de la déduction pour petite entreprise (fédéral)"
       />
 
       <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-        <h3 className="font-semibold text-gray-900 mb-4">Account Balances</h3>
+        <h3 className="font-semibold text-gray-900 mb-1">{t('accountBalances') || 'Soldes de compte'}</h3>
+        <p className="text-xs text-gray-500 mb-4">
+          Soldes d'ouverture pour l'année fiscale {currentYear} — utilisés dans le calcul d'impôt.
+        </p>
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -296,7 +373,7 @@ function TaxProfileTab({ onSave }: { onSave: () => void }) {
               value={formData.gripBalance}
               onChange={(e) => handleChange('gripBalance', e.target.value)}
               placeholder="0"
-              helperText="Capital gains reserve eligible for capital dividend"
+              helperText="IMRTD-déterminés — admissible au crédit d'impôt bonifié sur dividende"
             />
           </div>
 
@@ -309,14 +386,14 @@ function TaxProfileTab({ onSave }: { onSave: () => void }) {
               value={formData.cdaBalance}
               onChange={(e) => handleChange('cdaBalance', e.target.value)}
               placeholder="0"
-              helperText="Available for tax-free capital dividend distribution"
+              helperText="Compte de dividendes en capital — disponible pour distribution non imposable"
             />
           </div>
         </div>
       </div>
 
-      <Button onClick={onSave} className="w-full">
-        {commonT('save')}
+      <Button onClick={handleSave} className="w-full" disabled={saving || !orgId}>
+        {saving ? commonT('loading') || 'Sauvegarde…' : commonT('save')}
       </Button>
     </div>
   );
@@ -324,8 +401,6 @@ function TaxProfileTab({ onSave }: { onSave: () => void }) {
 
 function IntegrationsTab() {
   const t = useTranslations('settings');
-  const [googleConnected, setGoogleConnected] = useState(false);
-  const [emailScanningEnabled, setEmailScanningEnabled] = useState(false);
 
   return (
     <div className="space-y-6">
@@ -337,29 +412,16 @@ function IntegrationsTab() {
             <div>
               <CardTitle level="h3">Google Drive</CardTitle>
               <p className="text-sm text-gray-600 mt-1">
-                Connect your Google Drive to automatically import receipts
+                Importez vos reçus automatiquement depuis Google Drive (bientôt disponible)
               </p>
             </div>
           </div>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-between">
-            <div>
-              {googleConnected && (
-                <div className="flex items-center gap-2 text-green-600">
-                  <Check size={16} />
-                  <span className="text-sm font-medium">Connected as john@example.com</span>
-                </div>
-              )}
-              {!googleConnected && (
-                <p className="text-sm text-gray-600">Not connected</p>
-              )}
-            </div>
-            <Button
-              variant={googleConnected ? 'outline' : 'primary'}
-              onClick={() => setGoogleConnected(!googleConnected)}
-            >
-              {googleConnected ? 'Disconnect' : 'Connect Google Drive'}
+            <p className="text-sm text-gray-500 italic">Prochainement</p>
+            <Button variant="outline" disabled>
+              Connecter Google Drive
             </Button>
           </div>
         </CardContent>
@@ -373,29 +435,16 @@ function IntegrationsTab() {
             <div>
               <CardTitle level="h3">{t('emailScanning')}</CardTitle>
               <p className="text-sm text-gray-600 mt-1">
-                {t('enableEmailScanning')}
+                Détection automatique de reçus dans vos courriels (bientôt disponible)
               </p>
             </div>
           </div>
         </CardHeader>
         <CardContent>
           <div className="flex items-center justify-between">
-            <div>
-              {emailScanningEnabled && (
-                <div className="flex items-center gap-2 text-green-600">
-                  <Check size={16} />
-                  <span className="text-sm font-medium">Email scanning enabled</span>
-                </div>
-              )}
-              {!emailScanningEnabled && (
-                <p className="text-sm text-gray-600">Email scanning disabled</p>
-              )}
-            </div>
-            <Button
-              variant={emailScanningEnabled ? 'outline' : 'primary'}
-              onClick={() => setEmailScanningEnabled(!emailScanningEnabled)}
-            >
-              {emailScanningEnabled ? 'Disable' : 'Enable'}
+            <p className="text-sm text-gray-500 italic">Prochainement</p>
+            <Button variant="outline" disabled>
+              Activer
             </Button>
           </div>
         </CardContent>
@@ -409,7 +458,7 @@ function IntegrationsTab() {
             <div>
               <CardTitle level="h3">{t('bankConnection')}</CardTitle>
               <p className="text-sm text-gray-600 mt-1">
-                Connect your bank account for automatic transaction import (Coming soon)
+                Importez vos transactions bancaires automatiquement (bientôt disponible)
               </p>
             </div>
           </div>
@@ -510,7 +559,7 @@ export default function SettingsPage() {
                     <CompanyInfoTab org={org} orgId={orgId} onSave={handleSave} />
                   )}
                   {activeTab === 'taxProfile' && (
-                    <TaxProfileTab onSave={handleSave} />
+                    <TaxProfileTab orgId={orgId} onSave={handleSave} />
                   )}
                   {activeTab === 'integrations' && (
                     <IntegrationsTab />

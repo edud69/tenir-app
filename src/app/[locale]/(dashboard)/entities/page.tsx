@@ -501,10 +501,8 @@ interface RelationFormData {
   ownership_percentage: string;
   share_class: string;
   num_shares: string;
-  share_value: string;
   effective_date: string;
   end_date: string;
-  notes: string;
 }
 
 function RelationFormModal({
@@ -524,10 +522,8 @@ function RelationFormModal({
     ownership_percentage: '100',
     share_class: 'A',
     num_shares: '',
-    share_value: '',
     effective_date: new Date().toISOString().split('T')[0],
     end_date: '',
-    notes: '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -639,7 +635,6 @@ interface FlowFormData {
   interest_rate: string;
   due_date: string;
   description: string;
-  notes: string;
 }
 
 const EMPTY_FLOW: FlowFormData = {
@@ -654,7 +649,6 @@ const EMPTY_FLOW: FlowFormData = {
   interest_rate: '',
   due_date: '',
   description: '',
-  notes: '',
 };
 
 const FLOW_FISCAL_NOTES: Partial<Record<FlowType, string>> = {
@@ -917,7 +911,7 @@ export default function EntitiesPage() {
         ...data,
         ownership_percentage: parseFloat(data.ownership_percentage),
         num_shares: data.num_shares ? parseInt(data.num_shares) : null,
-        share_value: data.share_value ? parseFloat(data.share_value) : null,
+        share_value: null,
       }),
     });
     if (!res.ok) {
@@ -943,7 +937,7 @@ export default function EntitiesPage() {
         interest_rate: data.interest_rate ? parseFloat(data.interest_rate) : null,
         due_date: data.due_date || null,
         description: data.description || null,
-        notes: data.notes || null,
+        notes: null,
       }),
     });
     if (!res.ok) {

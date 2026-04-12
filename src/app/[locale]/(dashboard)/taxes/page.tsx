@@ -236,7 +236,7 @@ export default function TaxesPage() {
               </div>
               {taxProfile && (
                 <p className="text-sm text-gray-500 pb-2">
-                  Tax projection for fiscal year {selectedYear}
+                  {t('taxYear', { year: selectedYear })}
                 </p>
               )}
             </div>
@@ -248,7 +248,7 @@ export default function TaxesPage() {
                 className="flex items-center gap-2"
               >
                 <Calculator size={16} />
-                {calculating ? commonT('loading') : 'Calculate Taxes'}
+                {calculating ? commonT('loading') : t('calculate')}
               </Button>
             ) : (
               <Button
@@ -258,7 +258,7 @@ export default function TaxesPage() {
                 className="flex items-center gap-2"
               >
                 <RefreshCw size={15} className={calculating ? 'animate-spin' : ''} />
-                {calculating ? commonT('loading') : 'Recalculate'}
+                {calculating ? commonT('loading') : t('calculate')}
               </Button>
             )}
           </div>
@@ -270,10 +270,10 @@ export default function TaxesPage() {
                 <Calculator size={36} className="text-tenir-400" />
               </div>
               <h3 className="text-xl font-semibold text-gray-800 mb-2">
-                No tax data for {selectedYear}
+                {t('noProfile')}
               </h3>
               <p className="text-sm text-gray-500 mb-8 max-w-sm">
-                Generate a tax projection based on your transactions and organization settings.
+                {t('taxYear', { year: selectedYear })}
               </p>
               <Button
                 variant="primary"
@@ -282,7 +282,7 @@ export default function TaxesPage() {
                 className="flex items-center gap-2"
               >
                 <Calculator size={16} />
-                {calculating ? commonT('loading') : 'Calculate Taxes'}
+                {calculating ? commonT('loading') : t('calculate')}
               </Button>
             </div>
           )}
@@ -454,7 +454,7 @@ export default function TaxesPage() {
                 <div className="flex items-center justify-between mb-5">
                   <div className="flex items-center gap-2.5">
                     <CreditCard size={18} className="text-gray-400" />
-                    <h3 className="text-base font-semibold text-gray-900">{t('installments')}</h3>
+                    <h3 className="text-base font-semibold text-gray-900">Paiements versés</h3>
                   </div>
                   <Link
                     href={`/${locale}/tax-payments`}

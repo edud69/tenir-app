@@ -40,7 +40,6 @@ interface TaxPaymentFormData {
   payment_type: 'installment' | 'balance_owing' | 'arrears';
   quarter: string;
   amount: string;
-  due_amount: string;
   payment_date: string;
   payment_method: string;
   reference_number: string;
@@ -78,7 +77,6 @@ function TaxPaymentModal({ year, defaults, onClose, onSubmit }: {
     payment_type:     defaults?.payment_type     ?? 'installment',
     quarter:          defaults?.quarter != null  ? String(defaults.quarter) : '',
     amount:           defaults?.due_amount != null ? String(defaults.due_amount) : '',
-    due_amount:       defaults?.due_amount != null ? String(defaults.due_amount) : '',
     payment_date:     new Date().toISOString().split('T')[0],
     payment_method:   'online',
     reference_number: '',
@@ -323,7 +321,7 @@ export default function TaxPaymentsPage() {
         payment_type:    fd.payment_type,
         quarter:         fd.payment_type === 'installment' && fd.quarter ? parseInt(fd.quarter) : null,
         amount:          parseFloat(fd.amount),
-        due_amount:      fd.due_amount ? parseFloat(fd.due_amount) : null,
+        due_amount:      null,
         payment_date:    fd.payment_date,
         payment_method:  fd.payment_method,
         reference_number: fd.reference_number || null,
