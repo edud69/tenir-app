@@ -16,6 +16,7 @@ import {
   Plus, Edit2, Trash2, ArrowUpRight, ArrowDownLeft, Paperclip, Upload,
   Link2, Unlink, FileText, ImageOff, Loader2, CheckCircle, X,
   CreditCard, Landmark, ArrowLeftRight, PiggyBank, Banknote,
+  AlertTriangle, FileSpreadsheet, FilePlus,
 } from 'lucide-react';
 import { useOrganization } from '@/hooks/useOrganization';
 import { createClient } from '@/lib/supabase/client';
@@ -23,6 +24,327 @@ import { createClient } from '@/lib/supabase/client';
 type TransactionType = 'expense' | 'income' | 'dividend' | 'capital_gain' | 'interest' | 'transfer';
 type AccountType = 'checking' | 'savings' | 'credit_card' | 'line_of_credit';
 type TransferType = 'credit_card_payment' | 'account_advance' | 'transfer';
+
+// ─── Import Transactions Modal ────────────────────────────────────────────────
+
+interface ImportedTransaction {
+  type: 'expense' | 'income' | 'dividend' | 'capital_gain' | 'interest' | 'transfer';
+  category: string;
+  date: string;
+  description: string;
+  amount: number;
+  vendor?: string | null;
+  notes?: string | null;
+  isDuplicate?: boolean;
+  duplicateId?: string;
+}
+
+type ImportStep = 'upload' | 'review' | 'done';
+
+function ImportTransactionsModal({
+  orgId,
+  userId,
+  onClose,
+  onImported,
+}: {
+  orgId: string;
+  userId: string;
+  onClose: () => void;
+  onImported: (txs: unknown[]) => void;
+}) {
+  const supabase = createClient();
+  const [step, setStep] = useState<ImportStep>('upload');
+  const [dragging, setDragging] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [extracted, setExtracted] = useState<ImportedTransaction[]>([]);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [importing, setImporting] = useState(false);
+  const [importedCount, setImportedCount] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = async (file: File) => {
+    setError(null);
+    setLoading(true);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('orgId', orgId);
+      const res = await fetch('/api/transactions/import', { method: 'POST', body: form });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Import failed');
+      const txs: ImportedTransaction[] = json.transactions || [];
+      setExtracted(txs);
+      // Pre-select all non-duplicates
+      const preSelected = new Set<number>();
+      txs.forEach((tx, i) => { if (!tx.isDuplicate) preSelected.add(i); });
+      setSelected(preSelected);
+      setStep('review');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to process file');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  };
+
+  const toggleSelect = (i: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i); else next.add(i);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (selected.size === extracted.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(extracted.map((_, i) => i)));
+    }
+  };
+
+  const handleImport = async () => {
+    if (selected.size === 0) return;
+    setImporting(true);
+    setError(null);
+    try {
+      const toImport = extracted.filter((_, i) => selected.has(i));
+      const inserts = toImport.map((tx) => ({
+        organization_id: orgId,
+        created_by: userId,
+        type: tx.type,
+        category: tx.category,
+        date: tx.date,
+        description: tx.description,
+        amount: tx.amount,
+        vendor: tx.vendor || null,
+        notes: tx.notes || null,
+        is_recurring: false,
+        currency: 'CAD',
+      }));
+
+      const { data, error: dbErr } = await (supabase as any)
+        .from('transactions')
+        .insert(inserts)
+        .select();
+      if (dbErr) throw dbErr;
+      setImportedCount(data?.length || toImport.length);
+      onImported(data || []);
+      setStep('done');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Import failed');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const typeColors: Record<string, string> = {
+    expense: 'text-red-600 bg-red-50',
+    income: 'text-emerald-600 bg-emerald-50',
+    dividend: 'text-blue-600 bg-blue-50',
+    capital_gain: 'text-purple-600 bg-purple-50',
+    interest: 'text-sky-600 bg-sky-50',
+    transfer: 'text-amber-600 bg-amber-50',
+  };
+
+  const typeLabels: Record<string, string> = {
+    expense: 'Dépense',
+    income: 'Revenu',
+    dividend: 'Dividende',
+    capital_gain: 'Gain cap.',
+    interest: 'Intérêt',
+    transfer: 'Transfert',
+  };
+
+  const duplicates = extracted.filter((tx) => tx.isDuplicate).length;
+  const newCount = extracted.length - duplicates;
+
+  return (
+    <Modal isOpen onClose={onClose} title="Importer des transactions" size="xl">
+      <div className="space-y-4">
+        {/* ── Step: Upload ── */}
+        {step === 'upload' && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Importez un relevé bancaire ou un fichier comptable. Formats supportés : PDF, Excel (.xlsx/.xls) ou CSV.
+            </p>
+            <div
+              className={cn(
+                'relative border-2 border-dashed rounded-xl p-10 text-center transition-colors cursor-pointer',
+                dragging ? 'border-tenir-500 bg-tenir-50' : 'border-gray-200 hover:border-tenir-300 hover:bg-gray-50'
+              )}
+              onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {loading ? (
+                <div className="flex flex-col items-center gap-3">
+                  <Loader2 size={32} className="text-tenir-500 animate-spin" />
+                  <p className="text-sm font-medium text-gray-700">Analyse en cours avec Claude AI…</p>
+                  <p className="text-xs text-gray-400">Extraction des transactions depuis le fichier</p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-3">
+                  <div className="flex gap-3">
+                    <div className="p-3 rounded-xl bg-red-50"><FileText size={24} className="text-red-400" /></div>
+                    <div className="p-3 rounded-xl bg-emerald-50"><FileSpreadsheet size={24} className="text-emerald-400" /></div>
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-800">Glissez votre fichier ici</p>
+                    <p className="text-sm text-gray-500 mt-1">ou cliquez pour sélectionner — PDF, XLSX, XLS, CSV</p>
+                  </div>
+                </div>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.xlsx,.xls,.csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+              />
+            </div>
+            {error && (
+              <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-lg text-sm text-red-700">
+                <AlertTriangle size={16} className="flex-shrink-0" />
+                {error}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Step: Review ── */}
+        {step === 'review' && (
+          <div className="space-y-3">
+            {/* Summary */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 rounded-lg text-sm font-medium text-emerald-700">
+                <FilePlus size={14} />
+                {newCount} nouvelle{newCount !== 1 ? 's' : ''}
+              </div>
+              {duplicates > 0 && (
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 rounded-lg text-sm font-medium text-amber-700">
+                  <AlertTriangle size={14} />
+                  {duplicates} doublon{duplicates !== 1 ? 's' : ''} détecté{duplicates !== 1 ? 's' : ''}
+                </div>
+              )}
+              <span className="text-sm text-gray-500 ml-auto">{selected.size} sélectionné{selected.size !== 1 ? 's' : ''}</span>
+            </div>
+
+            {/* Table */}
+            <div className="border border-gray-100 rounded-xl overflow-hidden max-h-96 overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
+                  <tr>
+                    <th className="px-3 py-2 text-left">
+                      <input
+                        type="checkbox"
+                        checked={selected.size === extracted.length && extracted.length > 0}
+                        onChange={toggleAll}
+                        className="rounded"
+                      />
+                    </th>
+                    <th className="px-3 py-2 text-left font-medium text-gray-500">Date</th>
+                    <th className="px-3 py-2 text-left font-medium text-gray-500">Description</th>
+                    <th className="px-3 py-2 text-left font-medium text-gray-500">Type</th>
+                    <th className="px-3 py-2 text-right font-medium text-gray-500">Montant</th>
+                    <th className="px-3 py-2 text-center font-medium text-gray-500"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {extracted.map((tx, i) => (
+                    <tr
+                      key={i}
+                      className={cn(
+                        'transition-colors',
+                        tx.isDuplicate ? 'bg-amber-50/60' : 'hover:bg-gray-50',
+                        selected.has(i) ? 'bg-tenir-50/30' : ''
+                      )}
+                    >
+                      <td className="px-3 py-2.5">
+                        <input
+                          type="checkbox"
+                          checked={selected.has(i)}
+                          onChange={() => toggleSelect(i)}
+                          className="rounded"
+                        />
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{tx.date}</td>
+                      <td className="px-3 py-2.5">
+                        <p className="font-medium text-gray-900 truncate max-w-48">{tx.description}</p>
+                        {tx.vendor && <p className="text-xs text-gray-400">{tx.vendor}</p>}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', typeColors[tx.type] || 'bg-gray-100 text-gray-600')}>
+                          {typeLabels[tx.type] || tx.type}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-semibold text-gray-900 whitespace-nowrap">
+                        {formatCurrency(tx.amount)}
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        {tx.isDuplicate && (
+                          <span title="Doublon potentiel" className="inline-flex items-center gap-1 text-xs text-amber-600">
+                            <AlertTriangle size={12} />
+                            Doublon
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {error && (
+              <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-lg text-sm text-red-700">
+                <AlertTriangle size={16} className="flex-shrink-0" />
+                {error}
+              </div>
+            )}
+
+            <div className="flex gap-3 justify-end pt-1">
+              <Button variant="outline" onClick={() => { setStep('upload'); setExtracted([]); setSelected(new Set()); setError(null); }}>
+                Retour
+              </Button>
+              <Button
+                variant="primary"
+                icon={importing ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                onClick={handleImport}
+                disabled={selected.size === 0 || importing}
+              >
+                {importing ? 'Importation…' : `Importer ${selected.size} transaction${selected.size !== 1 ? 's' : ''}`}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Step: Done ── */}
+        {step === 'done' && (
+          <div className="text-center py-6 space-y-3">
+            <div className="w-14 h-14 bg-emerald-100 rounded-full flex items-center justify-center mx-auto">
+              <CheckCircle size={28} className="text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-lg font-semibold text-gray-900">Importation réussie</p>
+              <p className="text-sm text-gray-500 mt-1">
+                {importedCount} transaction{importedCount !== 1 ? 's' : ''} ajoutée{importedCount !== 1 ? 's' : ''} avec succès.
+              </p>
+            </div>
+            <Button variant="primary" onClick={onClose}>Fermer</Button>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
 
 // ─── OCR helpers ──────────────────────────────────────────────────────────────
 
@@ -1046,6 +1368,7 @@ export default function ExpensesPage() {
   const [linkTxModal, setLinkTxModal] = useState<Transaction | null>(null);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [editAccount, setEditAccount] = useState<BankAccount | null>(null);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState<string>(() => searchParams.get('search') ?? '');
@@ -1474,8 +1797,8 @@ export default function ExpensesPage() {
             </CardContent>
           </Card>
 
-          {/* ── Add Transaction ─────────────────────────────────────────────── */}
-          <div className="mb-6">
+          {/* ── Add / Import Transaction ─────────────────────────────────── */}
+          <div className="mb-6 flex items-center gap-3">
             <Button
               variant="primary"
               icon={<Plus size={18} />}
@@ -1483,6 +1806,14 @@ export default function ExpensesPage() {
               disabled={!orgId}
             >
               {t('addTransaction')}
+            </Button>
+            <Button
+              variant="outline"
+              icon={<Upload size={16} />}
+              onClick={() => setIsImportModalOpen(true)}
+              disabled={!orgId}
+            >
+              Importer PDF / Excel
             </Button>
           </div>
 
@@ -1710,6 +2041,18 @@ export default function ExpensesPage() {
           allTransactions={transactions}
           onClose={() => setLinkTxModal(null)}
           onLinked={handleTxLinked}
+        />
+      )}
+
+      {isImportModalOpen && orgId && user && (
+        <ImportTransactionsModal
+          orgId={orgId}
+          userId={user.id}
+          onClose={() => setIsImportModalOpen(false)}
+          onImported={(newTxs) => {
+            setTransactions((prev) => [...(newTxs as Transaction[]), ...prev]);
+            setIsImportModalOpen(false);
+          }}
         />
       )}
     </div>
