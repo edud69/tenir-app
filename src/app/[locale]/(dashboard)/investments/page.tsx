@@ -40,10 +40,23 @@ interface Investment {
   current_price: number | null;
   currency: string;
   account_type: string | null;
+  account_id: string | null;
   notes: string | null;
   sold: boolean;
   sale_price: number | null;
   sale_date: string | null;
+}
+
+interface BrokerageAccount {
+  id: string;
+  organization_id: string;
+  name: string;
+  institution: string | null;
+  last_four: string | null;
+  currency: string;
+  current_balance: number;
+  is_active: boolean;
+  created_at: string;
 }
 
 interface DividendRecord {
@@ -101,7 +114,57 @@ interface RentTransaction {
 interface InvestmentFormData {
   symbol: string; name: string; type: string; shares: number;
   purchase_price: number; purchase_date: string; current_price: number;
-  currency: string; account_type: string; notes: string;
+  currency: string; account_id: string; notes: string;
+}
+
+// ─── Brokerage Account Modal ──────────────────────────────────────────────────
+
+interface BrokerageAccountFormData {
+  name: string;
+  institution: string;
+  last_four: string;
+  currency: string;
+}
+
+function BrokerageAccountModal({ isOpen, onClose, onSubmit, initialData }: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (data: BrokerageAccountFormData) => void;
+  initialData?: BrokerageAccount;
+}) {
+  const [fd, setFd] = useState<BrokerageAccountFormData>(
+    initialData
+      ? { name: initialData.name, institution: initialData.institution || '', last_four: initialData.last_four || '', currency: initialData.currency }
+      : { name: '', institution: '', last_four: '', currency: 'CAD' }
+  );
+  useEffect(() => {
+    setFd(initialData
+      ? { name: initialData.name, institution: initialData.institution || '', last_four: initialData.last_four || '', currency: initialData.currency }
+      : { name: '', institution: '', last_four: '', currency: 'CAD' }
+    );
+  }, [isOpen]);
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose}
+      title={initialData ? 'Modifier le compte de courtage' : 'Ajouter un compte de courtage'}
+      size="md"
+      footer={
+        <div className="flex gap-3">
+          <Button variant="ghost" fullWidth onClick={onClose}>Annuler</Button>
+          <Button variant="primary" fullWidth disabled={!fd.name} onClick={() => { onSubmit(fd); onClose(); }}>Enregistrer</Button>
+        </div>
+      }>
+      <div className="space-y-4">
+        <Input label="Nom du compte" value={fd.name} onChange={(e) => setFd({ ...fd, name: e.target.value })} placeholder="CELI Disnat, REER RBC…" required />
+        <div className="grid grid-cols-2 gap-4">
+          <Input label="Institution" value={fd.institution} onChange={(e) => setFd({ ...fd, institution: e.target.value })} placeholder="Desjardins, RBC, TD…" />
+          <Input label="4 derniers chiffres" value={fd.last_four} onChange={(e) => setFd({ ...fd, last_four: e.target.value })} placeholder="1234" maxLength={4} />
+        </div>
+        <Select label="Devise" value={fd.currency} onChange={(v) => setFd({ ...fd, currency: v as string })}
+          options={[{ value: 'CAD', label: 'CAD' }, { value: 'USD', label: 'USD' }]} />
+      </div>
+    </Modal>
+  );
 }
 
 const YTYPE_TO_APP: Record<string, string> = {
@@ -245,10 +308,11 @@ function SymbolSearch({ value, locked, onSelect, onClear }: {
   );
 }
 
-function InvestmentModal({ isOpen, onClose, onSubmit, initialData }: {
+function InvestmentModal({ isOpen, onClose, onSubmit, initialData, brokerageAccounts }: {
   isOpen: boolean; onClose: () => void;
   onSubmit: (data: InvestmentFormData) => void;
   initialData?: InvestmentFormData & { id?: string };
+  brokerageAccounts: BrokerageAccount[];
 }) {
   const t = useTranslations('investments');
   const commonT = useTranslations('common');
@@ -256,7 +320,7 @@ function InvestmentModal({ isOpen, onClose, onSubmit, initialData }: {
   const blank: InvestmentFormData = {
     symbol: '', name: '', type: 'stock', shares: 0,
     purchase_price: 0, purchase_date: new Date().toISOString().split('T')[0],
-    current_price: 0, currency: 'CAD', account_type: '', notes: '',
+    current_price: 0, currency: 'CAD', account_id: '', notes: '',
   };
 
   const [fd, setFd]         = useState<InvestmentFormData>(initialData ?? blank);
@@ -335,15 +399,13 @@ function InvestmentModal({ isOpen, onClose, onSubmit, initialData }: {
             <div className="grid grid-cols-2 gap-4">
               <Input label="Date d'achat" type="date" value={fd.purchase_date}
                 onChange={(e) => setFd({ ...fd, purchase_date: e.target.value })} />
-              <Select label="Compte" value={fd.account_type} onChange={(v) => setFd({ ...fd, account_type: v as string })}
+              <Select label="Compte de courtage" value={fd.account_id} onChange={(v) => setFd({ ...fd, account_id: v as string })}
                 options={[
                   { value: '', label: 'Non spécifié' },
-                  { value: 'reer', label: 'REER' },
-                  { value: 'celi', label: 'CELI' },
-                  { value: 'reee', label: 'REEE' },
-                  { value: 'non_enregistre', label: 'Non enregistré' },
-                  { value: 'marge', label: 'Compte sur marge' },
-                  { value: 'autre', label: 'Autre' },
+                  ...brokerageAccounts.map((a) => ({
+                    value: a.id,
+                    label: a.institution ? `${a.name} — ${a.institution}${a.last_four ? ` ···${a.last_four}` : ''}` : a.name,
+                  })),
                 ]} />
             </div>
             <Input label="Notes" value={fd.notes}
@@ -756,6 +818,11 @@ export default function InvestmentsPage() {
   const [portfolioOverflowOpen, setPortfolioOverflowOpen] = useState(false);
   const portfolioOverflowRef = useRef<HTMLDivElement>(null);
 
+  // Brokerage accounts state
+  const [brokerageAccounts, setBrokerageAccounts] = useState<BrokerageAccount[]>([]);
+  const [isBrokerageModalOpen, setIsBrokerageModalOpen] = useState(false);
+  const [editBrokerageAccount, setEditBrokerageAccount] = useState<BrokerageAccount | null>(null);
+
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (portfolioOverflowRef.current && !portfolioOverflowRef.current.contains(e.target as Node)) {
@@ -783,12 +850,13 @@ export default function InvestmentsPage() {
     setDataLoading(true);
     setError(null);
     try {
-      const [invRes, divRes, propRes, unitRes, txRes] = await Promise.all([
+      const [invRes, divRes, propRes, unitRes, txRes, brokerRes] = await Promise.all([
         (supabase as any).from('investments').select('*').eq('organization_id', orgId).eq('sold', false).order('created_at', { ascending: false }),
         (supabase as any).from('dividend_records').select('*').eq('organization_id', orgId).order('date', { ascending: false }),
         (supabase as any).from('rental_properties').select('*').eq('organization_id', orgId).order('created_at', { ascending: false }),
         (supabase as any).from('rental_units').select('*').order('unit_number'),
         (supabase as any).from('transactions').select('id,date,description,amount,vendor,property_id,category').eq('organization_id', orgId).eq('type', 'income').order('date', { ascending: false }),
+        (supabase as any).from('bank_accounts').select('*').eq('organization_id', orgId).eq('type', 'brokerage').eq('is_active', true).order('created_at', { ascending: true }),
       ]);
       if (invRes.error) throw invRes.error;
       if (propRes.error) throw propRes.error;
@@ -797,6 +865,7 @@ export default function InvestmentsPage() {
       setProperties(propRes.data || []);
       setUnits(unitRes.data || []);
       setRentTx(txRes.data || []);
+      setBrokerageAccounts(brokerRes.data || []);
     } catch (e: any) {
       setError(e.message || 'Erreur de chargement');
     } finally {
@@ -819,18 +888,14 @@ export default function InvestmentsPage() {
 
   // ── Portfolio metrics ──────────────────────────────────────────────────────
 
-  const ACCOUNT_TYPE_LABELS: Record<string, string> = {
-    reer: 'REER', celi: 'CELI', reee: 'REEE',
-    non_enregistre: 'Non enregistré', marge: 'Marge', autre: 'Autre',
-  };
-
-  const portfolioAccountTypes = Array.from(
-    new Set(investments.map((i) => i.account_type || '').filter(Boolean))
+  // Brokerage accounts that actually contain investments (have ≥1 symbol)
+  const brokerageAccountsWithInvestments = brokerageAccounts.filter((acc) =>
+    investments.some((i) => i.account_id === acc.id)
   );
 
   const filteredInvestments = portfolioAccountFilter === 'all'
     ? investments
-    : investments.filter((i) => (i.account_type || '') === portfolioAccountFilter);
+    : investments.filter((i) => i.account_id === portfolioAccountFilter);
 
   const filteredInvestmentIds = new Set(filteredInvestments.map((i) => i.id));
   const filteredDividends = portfolioAccountFilter === 'all'
@@ -904,7 +969,7 @@ export default function InvestmentsPage() {
       organization_id: orgId, symbol: data.symbol, name: data.name, type: data.type,
       shares: data.shares, purchase_price: data.purchase_price, purchase_date: data.purchase_date,
       adjusted_cost_base: data.purchase_price, current_price: data.current_price || null,
-      currency: data.currency, account_type: data.account_type || null, notes: data.notes || null, sold: false,
+      currency: data.currency, account_id: data.account_id || null, notes: data.notes || null, sold: false,
     });
     if (error) setError(error.message);
     else fetchData();
@@ -915,18 +980,18 @@ export default function InvestmentsPage() {
     const { error } = await (supabase as any)
       .from('investments')
       .update({
-        symbol:        data.symbol,
-        name:          data.name,
-        type:          data.type,
-        shares:        data.shares,
+        symbol:         data.symbol,
+        name:           data.name,
+        type:           data.type,
+        shares:         data.shares,
         purchase_price: data.purchase_price,
-        purchase_date: data.purchase_date,
+        purchase_date:  data.purchase_date,
         adjusted_cost_base: data.purchase_price,
-        current_price: data.current_price || null,
-        currency:      data.currency,
-        account_type:  data.account_type || null,
-        notes:         data.notes || null,
-        updated_at:    new Date().toISOString(),
+        current_price:  data.current_price || null,
+        currency:       data.currency,
+        account_id:     data.account_id || null,
+        notes:          data.notes || null,
+        updated_at:     new Date().toISOString(),
       })
       .eq('id', editInvestment.id);
     if (error) setError(error.message);
@@ -938,6 +1003,28 @@ export default function InvestmentsPage() {
       ));
     }
     setEditInvestment(null);
+  };
+
+  const handleSaveBrokerageAccount = async (data: BrokerageAccountFormData) => {
+    if (!orgId) return;
+    if (editBrokerageAccount) {
+      const { data: updated, error } = await (supabase as any)
+        .from('bank_accounts')
+        .update({ name: data.name, institution: data.institution || null, last_four: data.last_four || null, currency: data.currency })
+        .eq('id', editBrokerageAccount.id)
+        .select()
+        .single();
+      if (!error && updated) setBrokerageAccounts((prev) => prev.map((a) => a.id === editBrokerageAccount.id ? updated : a));
+      setEditBrokerageAccount(null);
+    } else {
+      const { data: newAcc, error } = await (supabase as any)
+        .from('bank_accounts')
+        .insert({ organization_id: orgId, name: data.name, type: 'brokerage', institution: data.institution || null, last_four: data.last_four || null, currency: data.currency, current_balance: 0 })
+        .select()
+        .single();
+      if (!error && newAcc) setBrokerageAccounts((prev) => [...prev, newAcc]);
+    }
+    setIsBrokerageModalOpen(false);
   };
 
   const handleDeleteInvestment = async (id: string) => {
@@ -1074,19 +1161,21 @@ export default function InvestmentsPage() {
           {/* ── Portfolio tab ── */}
           {mainTab === 'portfolio' && (
             <>
-              {/* Account filter pills */}
-              {(investments.length > 0 || portfolioAccountTypes.length > 0) && (() => {
-                const VISIBLE = 4;
-                const visibleTypes = portfolioAccountTypes.slice(0, VISIBLE);
-                const overflowTypes = portfolioAccountTypes.slice(VISIBLE);
-                const overflowHasSelected = overflowTypes.includes(portfolioAccountFilter);
+              {/* Brokerage account filter pills */}
+              {(() => {
+                const VISIBLE = 3;
+                const visibleAccounts = brokerageAccountsWithInvestments.slice(0, VISIBLE);
+                const overflowAccounts = brokerageAccountsWithInvestments.slice(VISIBLE);
+                const overflowHasSelected = overflowAccounts.some((a) => a.id === portfolioAccountFilter);
+                const selectedOverflowAcc = overflowAccounts.find((a) => a.id === portfolioAccountFilter);
 
                 return (
                   <div className="flex items-center gap-2 flex-wrap mb-6">
+                    {/* All pill */}
                     <button
                       onClick={() => { setPortfolioAccountFilter('all'); setInvPage(0); setDivPage(0); }}
                       className={cn(
-                        'flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-medium whitespace-nowrap transition-all',
+                        'flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-medium whitespace-nowrap transition-all',
                         portfolioAccountFilter === 'all'
                           ? 'bg-tenir-500 text-white border-tenir-500 shadow-sm'
                           : 'bg-white text-gray-600 border-gray-200 hover:border-tenir-300 hover:text-tenir-600'
@@ -1098,34 +1187,44 @@ export default function InvestmentsPage() {
                       </span>
                     </button>
 
-                    {visibleTypes.map((acType) => {
-                      const isSelected = portfolioAccountFilter === acType;
-                      const count = investments.filter((i) => (i.account_type || '') === acType).length;
+                    {/* Visible account pills */}
+                    {visibleAccounts.map((acc) => {
+                      const isSelected = portfolioAccountFilter === acc.id;
+                      const count = investments.filter((i) => i.account_id === acc.id).length;
                       return (
                         <button
-                          key={acType}
-                          onClick={() => { setPortfolioAccountFilter(isSelected ? 'all' : acType); setInvPage(0); setDivPage(0); }}
+                          key={acc.id}
+                          onClick={() => { setPortfolioAccountFilter(isSelected ? 'all' : acc.id); setInvPage(0); setDivPage(0); }}
                           className={cn(
-                            'flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-medium whitespace-nowrap transition-all',
+                            'group relative flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-medium whitespace-nowrap transition-all',
                             isSelected
                               ? 'bg-tenir-500 text-white border-tenir-500 shadow-sm'
                               : 'bg-white text-gray-600 border-gray-200 hover:border-tenir-300 hover:text-tenir-600'
                           )}
                         >
-                          {ACCOUNT_TYPE_LABELS[acType] || acType.toUpperCase()}
+                          <span className="truncate max-w-[140px]">{acc.name}</span>
+                          {acc.institution && <span className={cn('text-xs', isSelected ? 'text-white/70' : 'text-gray-400')}>{acc.institution}</span>}
                           <span className={cn('text-xs px-1.5 py-0.5 rounded-full font-semibold', isSelected ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-500')}>
                             {count}
                           </span>
+                          <button
+                            title="Modifier le compte"
+                            onClick={(e) => { e.stopPropagation(); setEditBrokerageAccount(acc); setIsBrokerageModalOpen(true); }}
+                            className={cn('absolute right-1.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-70 p-0.5 rounded hover:opacity-100 transition-opacity', isSelected ? 'text-white' : 'text-gray-500')}
+                          >
+                            <Edit2 size={11} />
+                          </button>
                         </button>
                       );
                     })}
 
-                    {overflowTypes.length > 0 && (
+                    {/* Overflow dropdown */}
+                    {overflowAccounts.length > 0 && (
                       <div className="relative" ref={portfolioOverflowRef}>
                         <button
                           onClick={() => setPortfolioOverflowOpen((o) => !o)}
                           className={cn(
-                            'flex items-center gap-1.5 px-3 py-2 rounded-xl border text-sm font-medium whitespace-nowrap transition-all',
+                            'flex items-center gap-1.5 px-3 py-2.5 rounded-xl border text-sm font-medium whitespace-nowrap transition-all',
                             overflowHasSelected
                               ? 'bg-tenir-500 text-white border-tenir-500 shadow-sm'
                               : portfolioOverflowOpen
@@ -1133,39 +1232,54 @@ export default function InvestmentsPage() {
                                 : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
                           )}
                         >
-                          {overflowHasSelected
-                            ? (ACCOUNT_TYPE_LABELS[portfolioAccountFilter] || portfolioAccountFilter.toUpperCase())
-                            : `+${overflowTypes.length}`}
+                          {overflowHasSelected ? selectedOverflowAcc?.name : `+${overflowAccounts.length}`}
                           <ChevronDown size={13} className={cn('transition-transform', portfolioOverflowOpen && 'rotate-180')} />
                         </button>
 
                         {portfolioOverflowOpen && (
-                          <div className="absolute top-full left-0 mt-1.5 z-20 bg-white rounded-xl border border-gray-200 shadow-lg p-1.5 min-w-44 space-y-0.5">
-                            {overflowTypes.map((acType) => {
-                              const isSelected = portfolioAccountFilter === acType;
-                              const count = investments.filter((i) => (i.account_type || '') === acType).length;
+                          <div className="absolute top-full left-0 mt-1.5 z-20 bg-white rounded-xl border border-gray-200 shadow-lg p-1.5 min-w-52 space-y-0.5">
+                            {overflowAccounts.map((acc) => {
+                              const isSelected = portfolioAccountFilter === acc.id;
+                              const count = investments.filter((i) => i.account_id === acc.id).length;
                               return (
                                 <button
-                                  key={acType}
-                                  onClick={() => { setPortfolioAccountFilter(isSelected ? 'all' : acType); setPortfolioOverflowOpen(false); setInvPage(0); setDivPage(0); }}
+                                  key={acc.id}
+                                  onClick={() => { setPortfolioAccountFilter(isSelected ? 'all' : acc.id); setPortfolioOverflowOpen(false); setInvPage(0); setDivPage(0); }}
                                   className={cn(
                                     'flex items-center justify-between w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors',
                                     isSelected ? 'bg-tenir-50 text-tenir-700' : 'text-gray-700 hover:bg-gray-50'
                                   )}
                                 >
-                                  {ACCOUNT_TYPE_LABELS[acType] || acType.toUpperCase()}
-                                  <span className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-400 font-semibold">{count}</span>
+                                  <div className="flex flex-col items-start min-w-0">
+                                    <span className="truncate">{acc.name}</span>
+                                    {acc.institution && <span className="text-xs text-gray-400">{acc.institution}</span>}
+                                  </div>
+                                  <span className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-400 font-semibold ml-2">{count}</span>
                                 </button>
                               );
                             })}
+                            {overflowHasSelected && (
+                              <div className="border-t border-gray-100 mt-1 pt-1">
+                                <button
+                                  onClick={() => { setEditBrokerageAccount(selectedOverflowAcc || null); setIsBrokerageModalOpen(true); setPortfolioOverflowOpen(false); }}
+                                  className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
+                                >
+                                  <Edit2 size={11} /> Modifier ce compte
+                                </button>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
                     )}
 
-                    {portfolioAccountTypes.length === 0 && investments.length > 0 && (
-                      <span className="text-xs text-gray-400 italic">Assignez un compte à vos titres pour filtrer</span>
-                    )}
+                    {/* Add brokerage account */}
+                    <button
+                      onClick={() => { setEditBrokerageAccount(null); setIsBrokerageModalOpen(true); }}
+                      className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-dashed border-gray-200 text-sm text-gray-400 hover:text-tenir-600 hover:border-tenir-300 transition-all whitespace-nowrap"
+                    >
+                      <Plus size={13} /> Compte de courtage
+                    </button>
                   </div>
                 );
               })()}
@@ -1318,7 +1432,7 @@ export default function InvestmentsPage() {
                                       shares: inv.shares, purchase_price: inv.purchase_price,
                                       purchase_date: inv.purchase_date,
                                       current_price: inv.current_price ?? 0,
-                                      currency: inv.currency, account_type: inv.account_type ?? '',
+                                      currency: inv.currency, account_id: inv.account_id ?? '',
                                       notes: inv.notes ?? '',
                                     })}
                                     className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-700 transition-colors"
@@ -1417,7 +1531,7 @@ export default function InvestmentsPage() {
       </div>
 
       {/* Modals */}
-      <InvestmentModal isOpen={isInvModalOpen} onClose={() => setIsInvModalOpen(false)} onSubmit={handleAddInvestment} />
+      <InvestmentModal isOpen={isInvModalOpen} onClose={() => setIsInvModalOpen(false)} onSubmit={handleAddInvestment} brokerageAccounts={brokerageAccounts} />
 
       {editInvestment && (
         <InvestmentModal
@@ -1425,8 +1539,16 @@ export default function InvestmentsPage() {
           onClose={() => setEditInvestment(null)}
           onSubmit={handleUpdateInvestment}
           initialData={editInvestment}
+          brokerageAccounts={brokerageAccounts}
         />
       )}
+
+      <BrokerageAccountModal
+        isOpen={isBrokerageModalOpen}
+        onClose={() => { setIsBrokerageModalOpen(false); setEditBrokerageAccount(null); }}
+        onSubmit={handleSaveBrokerageAccount}
+        initialData={editBrokerageAccount ?? undefined}
+      />
 
       <PropertyModal isOpen={showPropertyModal} onClose={() => setShowPropertyModal(false)} onSubmit={handleAddProperty} />
 
