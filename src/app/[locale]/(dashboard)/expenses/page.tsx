@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
+import { Pagination } from '@/components/ui/pagination';
 import { Table, TableBody, TableHead, TableHeader, TableRow, TableCell } from '@/components/ui/table';
 import {
   Plus, Edit2, Trash2, ArrowUpRight, ArrowDownLeft, Paperclip, Upload,
@@ -1388,6 +1389,9 @@ export default function ExpensesPage() {
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [accountFilter, setAccountFilter] = useState<string>('all');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [txPage, setTxPage] = useState(0);
+  const TX_PAGE_SIZE = 15;
 
   useEffect(() => {
     setSearchQuery(searchParams.get('search') ?? '');
@@ -1448,6 +1452,13 @@ export default function ExpensesPage() {
     }
     return true;
   });
+
+  const activeFilterCount = [
+    typeFilter !== 'all', categoryFilter !== 'all', accountFilter !== 'all',
+    !!dateRange.start, !!dateRange.end, !!searchQuery,
+  ].filter(Boolean).length;
+
+  const pagedTransactions = filteredTransactions.slice(txPage * TX_PAGE_SIZE, (txPage + 1) * TX_PAGE_SIZE);
 
   // ── Summaries ──────────────────────────────────────────────────────────────
   const totalExpenses = transactions
@@ -1693,7 +1704,7 @@ export default function ExpensesPage() {
               return (
                 <div className="relative group">
                   <button
-                    onClick={() => { setAccountFilter(isSelected ? 'all' : acc.id); setAccountOverflowOpen(false); }}
+                    onClick={() => { setAccountFilter(isSelected ? 'all' : acc.id); setAccountOverflowOpen(false); setTxPage(0); }}
                     className={cn(
                       'flex items-center gap-2 py-2.5 rounded-xl border text-sm font-medium whitespace-nowrap transition-all',
                       compact ? 'pl-3 pr-3 w-full' : 'pl-3 pr-8',
@@ -1738,7 +1749,7 @@ export default function ExpensesPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     {/* "Tous" pill */}
                     <button
-                      onClick={() => setAccountFilter('all')}
+                      onClick={() => { setAccountFilter('all'); setTxPage(0); }}
                       className={cn(
                         'flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-medium whitespace-nowrap transition-all',
                         accountFilter === 'all'
@@ -1813,55 +1824,69 @@ export default function ExpensesPage() {
             );
           })()}
 
-          {/* ── Filters ────────────────────────────────────────────────────── */}
-          <Card padding="md" shadow="sm" className="mb-6">
-            <CardHeader>
-              <CardTitle level="h3">Filtres</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                <Select
-                  label={t('type')}
-                  value={typeFilter}
-                  onChange={(value) => setTypeFilter(String(value))}
-                  options={[{ value: 'all', label: 'Tous les types' }, ...typeOptions]}
-                />
-                <Select
-                  label={commonT('category')}
-                  value={categoryFilter}
-                  onChange={(value) => setCategoryFilter(String(value))}
-                  options={[{ value: 'all', label: 'Toutes les catégories' }, ...categoryOptions]}
-                />
-                <Input
-                  label={t('startDate')}
-                  type="date"
-                  value={dateRange.start}
-                  onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
-                />
-                <Input
-                  label={t('endDate')}
-                  type="date"
-                  value={dateRange.end}
-                  onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
-                />
-                <div className="flex items-end">
-                  <Button
-                    variant="outline"
-                    fullWidth
-                    size="md"
-                    onClick={() => {
-                      setTypeFilter('all');
-                      setCategoryFilter('all');
-                      setAccountFilter('all');
-                      setDateRange({ start: '', end: '' });
-                    }}
-                  >
-                    Effacer
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          {/* ── Filters (collapsible) ───────────────────────────────────── */}
+          <div className="mb-6">
+            <button
+              onClick={() => setFiltersOpen((o) => !o)}
+              className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors mb-2"
+            >
+              <ChevronDown size={15} className={cn('transition-transform', filtersOpen && 'rotate-180')} />
+              Filtres
+              {activeFilterCount > 0 && (
+                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-tenir-500 text-white text-[10px] font-bold">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+            {filtersOpen && (
+              <Card padding="md" shadow="sm">
+                <CardContent>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                    <Select
+                      label={t('type')}
+                      value={typeFilter}
+                      onChange={(value) => { setTypeFilter(String(value)); setTxPage(0); }}
+                      options={[{ value: 'all', label: 'Tous les types' }, ...typeOptions]}
+                    />
+                    <Select
+                      label={commonT('category')}
+                      value={categoryFilter}
+                      onChange={(value) => { setCategoryFilter(String(value)); setTxPage(0); }}
+                      options={[{ value: 'all', label: 'Toutes les catégories' }, ...categoryOptions]}
+                    />
+                    <Input
+                      label={t('startDate')}
+                      type="date"
+                      value={dateRange.start}
+                      onChange={(e) => { setDateRange({ ...dateRange, start: e.target.value }); setTxPage(0); }}
+                    />
+                    <Input
+                      label={t('endDate')}
+                      type="date"
+                      value={dateRange.end}
+                      onChange={(e) => { setDateRange({ ...dateRange, end: e.target.value }); setTxPage(0); }}
+                    />
+                    <div className="flex items-end">
+                      <Button
+                        variant="outline"
+                        fullWidth
+                        size="md"
+                        onClick={() => {
+                          setTypeFilter('all');
+                          setCategoryFilter('all');
+                          setAccountFilter('all');
+                          setDateRange({ start: '', end: '' });
+                          setTxPage(0);
+                        }}
+                      >
+                        Effacer
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
 
           {/* ── Add / Import Transaction ─────────────────────────────────── */}
           <div className="mb-6 flex items-center gap-3">
@@ -1887,7 +1912,7 @@ export default function ExpensesPage() {
           <Card padding="none" shadow="sm" className="mb-8">
             <CardHeader className="px-6 pt-6">
               <CardTitle level="h3">
-                Transactions ({filteredTransactions.length})
+                Transactions ({filteredTransactions.length}{filteredTransactions.length !== transactions.length ? ` / ${transactions.length}` : ''})
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -1908,7 +1933,7 @@ export default function ExpensesPage() {
                   </TableHeader>
                   <TableBody>
                     {filteredTransactions.length > 0 ? (
-                      filteredTransactions.map((tx) => {
+                      pagedTransactions.map((tx) => {
                         const account = bankAccounts.find((a) => a.id === tx.account_id);
                         return (
                           <TableRow key={tx.id} onClick={() => setViewTx(tx)} className="cursor-pointer">
@@ -2021,6 +2046,13 @@ export default function ExpensesPage() {
                   </TableBody>
                 </Table>
               )}
+              <Pagination
+                page={txPage}
+                pageSize={TX_PAGE_SIZE}
+                total={filteredTransactions.length}
+                onPageChange={setTxPage}
+                className="px-2"
+              />
             </CardContent>
           </Card>
 

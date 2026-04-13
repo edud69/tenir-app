@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
+import { Pagination } from '@/components/ui/pagination';
 import {
   Plus, Trash2, CheckCircle2, Clock, AlertCircle,
   CreditCard, ChevronRight, DollarSign, ArrowUpRight,
@@ -281,6 +282,8 @@ export default function TaxPaymentsPage() {
   const [payments, setPayments] = useState<TaxPayment[]>([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [pmtPage, setPmtPage] = useState(0);
+  const PMT_PAGE_SIZE = 10;
   const [modalDefaults, setModalDefaults] = useState<Partial<TaxPayment> | undefined>();
   const [taxProfile, setTaxProfile] = useState<{ federal_tax: number | null; provincial_tax: number | null } | null>(null);
 
@@ -361,6 +364,7 @@ export default function TaxPaymentsPage() {
   const totalFederal   = payments.filter((p) => p.authority === 'federal').reduce((s, p) => s + p.amount, 0);
   const totalProvincial = payments.filter((p) => p.authority === 'provincial').reduce((s, p) => s + p.amount, 0);
   const totalPaid = totalFederal + totalProvincial;
+  const pagedPayments = payments.slice(pmtPage * PMT_PAGE_SIZE, (pmtPage + 1) * PMT_PAGE_SIZE);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -377,7 +381,7 @@ export default function TaxPaymentsPage() {
                   label="Année fiscale"
                   options={yearOptions}
                   value={selectedYear}
-                  onChange={(v) => setSelectedYear(v as string)}
+                  onChange={(v) => { setSelectedYear(v as string); setPmtPage(0); }}
                 />
               </div>
               <Link
@@ -543,7 +547,7 @@ export default function TaxPaymentsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {payments.map((p) => (
+                      {pagedPayments.map((p) => (
                         <tr key={p.id} className="border-b border-gray-50 hover:bg-gray-50/50 group transition-colors">
                           <td className="py-3 pr-4 text-gray-600 text-xs">{formatDate(p.payment_date)}</td>
                           <td className="py-3 px-4">
@@ -583,6 +587,7 @@ export default function TaxPaymentsPage() {
                     </tfoot>
                   </table>
                 </div>
+                <Pagination page={pmtPage} pageSize={PMT_PAGE_SIZE} total={payments.length} onPageChange={setPmtPage} className="mt-3" />
               </>
             )}
           </div>

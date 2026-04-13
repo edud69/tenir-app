@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Modal } from '@/components/ui/modal';
 import { Table, TableBody, TableHead, TableHeader, TableRow, TableCell } from '@/components/ui/table';
+import { Pagination } from '@/components/ui/pagination';
 import {
   Plus, TrendingUp, DollarSign, ArrowUpRight, ArrowDownLeft, Trash2, Edit2,
   Building2, Home, ChevronDown, ChevronRight, Users, MapPin, Link2, Unlink,
@@ -748,6 +749,10 @@ export default function InvestmentsPage() {
   const [quotesError, setQuotesError] = useState<string | null>(null);
   const [quotesUpdatedAt, setQuotesUpdatedAt] = useState<Date | null>(null);
   const [portfolioAccountFilter, setPortfolioAccountFilter] = useState<string>('all');
+  const [invPage, setInvPage] = useState(0);
+  const [divPage, setDivPage] = useState(0);
+  const INV_PAGE_SIZE = 10;
+  const DIV_PAGE_SIZE = 10;
   const [portfolioOverflowOpen, setPortfolioOverflowOpen] = useState(false);
   const portfolioOverflowRef = useRef<HTMLDivElement>(null);
 
@@ -831,6 +836,9 @@ export default function InvestmentsPage() {
   const filteredDividends = portfolioAccountFilter === 'all'
     ? dividends
     : dividends.filter((d) => d.investment_id && filteredInvestmentIds.has(d.investment_id));
+
+  const pagedInvestments = filteredInvestments.slice(invPage * INV_PAGE_SIZE, (invPage + 1) * INV_PAGE_SIZE);
+  const pagedDividends   = filteredDividends.slice(divPage * DIV_PAGE_SIZE, (divPage + 1) * DIV_PAGE_SIZE);
 
   const portfolioBook   = filteredInvestments.reduce((s, i) => s + i.shares * i.purchase_price, 0);
   const portfolioMarket = filteredInvestments.reduce((s, i) => s + i.shares * (i.current_price ?? i.purchase_price), 0);
@@ -1076,7 +1084,7 @@ export default function InvestmentsPage() {
                 return (
                   <div className="flex items-center gap-2 flex-wrap mb-6">
                     <button
-                      onClick={() => setPortfolioAccountFilter('all')}
+                      onClick={() => { setPortfolioAccountFilter('all'); setInvPage(0); setDivPage(0); }}
                       className={cn(
                         'flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-medium whitespace-nowrap transition-all',
                         portfolioAccountFilter === 'all'
@@ -1096,7 +1104,7 @@ export default function InvestmentsPage() {
                       return (
                         <button
                           key={acType}
-                          onClick={() => setPortfolioAccountFilter(isSelected ? 'all' : acType)}
+                          onClick={() => { setPortfolioAccountFilter(isSelected ? 'all' : acType); setInvPage(0); setDivPage(0); }}
                           className={cn(
                             'flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-medium whitespace-nowrap transition-all',
                             isSelected
@@ -1139,7 +1147,7 @@ export default function InvestmentsPage() {
                               return (
                                 <button
                                   key={acType}
-                                  onClick={() => { setPortfolioAccountFilter(isSelected ? 'all' : acType); setPortfolioOverflowOpen(false); }}
+                                  onClick={() => { setPortfolioAccountFilter(isSelected ? 'all' : acType); setPortfolioOverflowOpen(false); setInvPage(0); setDivPage(0); }}
                                   className={cn(
                                     'flex items-center justify-between w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors',
                                     isSelected ? 'bg-tenir-50 text-tenir-700' : 'text-gray-700 hover:bg-gray-50'
@@ -1240,7 +1248,7 @@ export default function InvestmentsPage() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {filteredInvestments.map((inv) => {
+                          {pagedInvestments.map((inv) => {
                             const q = quotes[inv.symbol.toUpperCase()];
                             const livePrice  = q && !q.error ? q.price : (inv.current_price ?? inv.purchase_price);
                             const book       = inv.shares * inv.purchase_price;
@@ -1325,6 +1333,7 @@ export default function InvestmentsPage() {
                       </Table>
                     </div>
                   )}
+                  <Pagination page={invPage} pageSize={INV_PAGE_SIZE} total={filteredInvestments.length} onPageChange={setInvPage} className="px-2" />
                 </CardContent>
               </Card>
 
@@ -1335,7 +1344,7 @@ export default function InvestmentsPage() {
                   <Table hoverable>
                     <TableHeader><TableRow isHeader><TableHead>Date</TableHead><TableHead>Payeur</TableHead><TableHead>Type</TableHead><TableHead align="right">Montant</TableHead></TableRow></TableHeader>
                     <TableBody>
-                      {filteredDividends.length > 0 ? filteredDividends.map((div) => (
+                      {filteredDividends.length > 0 ? pagedDividends.map((div) => (
                         <TableRow key={div.id}>
                           <TableCell>{formatDate(div.date)}</TableCell>
                           <TableCell>{div.payer || '—'}</TableCell>
@@ -1351,6 +1360,7 @@ export default function InvestmentsPage() {
                       )}
                     </TableBody>
                   </Table>
+                  <Pagination page={divPage} pageSize={DIV_PAGE_SIZE} total={filteredDividends.length} onPageChange={setDivPage} className="px-2" />
                 </CardContent>
               </Card>
             </>

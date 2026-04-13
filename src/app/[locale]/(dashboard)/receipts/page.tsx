@@ -10,8 +10,9 @@ import { Button } from '@/components/ui/button';
 import {
   CheckCircle, AlertCircle, Cloud, FileText, Receipt, X, Link2, Unlink,
   ExternalLink, ChevronRight, Search, Calendar, Tag, Building2,
-  DollarSign, Loader2, ImageOff, Plus,
+  DollarSign, Loader2, ImageOff, Plus, ChevronDown,
 } from 'lucide-react';
+import { Pagination } from '@/components/ui/pagination';
 import { createClient } from '@/lib/supabase/client';
 import { useOrganization } from '@/hooks/useOrganization';
 
@@ -624,6 +625,9 @@ export default function ReceiptsPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchQuery, setSearchQuery]   = useState('');
   const [dateRange, setDateRange]       = useState({ start: '', end: '' });
+  const [filtersOpen, setFiltersOpen]   = useState(false);
+  const [rcPage, setRcPage]             = useState(0);
+  const RC_PAGE_SIZE = 12;
   const [detailReceipt, setDetailReceipt]     = useState<ReceiptItem | null>(null);
   const [categoryReceipt, setCategoryReceipt] = useState<ReceiptItem | null>(null);
 
@@ -787,6 +791,9 @@ export default function ReceiptsPage() {
     return true;
   });
 
+  const activeFilterCount = [statusFilter !== 'all', !!searchQuery, !!dateRange.start, !!dateRange.end].filter(Boolean).length;
+  const pagedFiltered = filtered.slice(rcPage * RC_PAGE_SIZE, (rcPage + 1) * RC_PAGE_SIZE);
+
   const totalAmount   = filtered.reduce((s, r) => s + (r.amount ?? 0), 0);
   const verifiedCount = filtered.filter((r) => r.status === 'verified').length;
   const linkedCount   = filtered.filter((r) => r.transaction_id).length;
@@ -840,25 +847,41 @@ export default function ReceiptsPage() {
             </div>
           )}
 
-          {/* Filters */}
-          <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-5 grid grid-cols-1 sm:grid-cols-4 gap-3">
-            <div className="relative">
-              <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-              <input type="text" placeholder={commonT('search')} value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-tenir-400/30 focus:border-tenir-400 bg-gray-50 focus:bg-white transition-all" />
-            </div>
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 text-sm border border-gray-200 rounded-xl bg-gray-50 text-gray-700 focus:outline-none focus:ring-2 focus:ring-tenir-400/30 focus:border-tenir-400">
-              <option value="all">All statuses</option>
-              <option value="pending">{t('pending')}</option>
-              <option value="verified">{t('verified')}</option>
-              <option value="rejected">{t('rejected')}</option>
-            </select>
-            <input type="date" value={dateRange.start} onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
-              className="px-3 py-2 text-sm border border-gray-200 rounded-xl bg-gray-50 text-gray-700 focus:outline-none focus:ring-2 focus:ring-tenir-400/30 focus:border-tenir-400" />
-            <input type="date" value={dateRange.end} onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
-              className="px-3 py-2 text-sm border border-gray-200 rounded-xl bg-gray-50 text-gray-700 focus:outline-none focus:ring-2 focus:ring-tenir-400/30 focus:border-tenir-400" />
+          {/* Filters (collapsible) */}
+          <div className="mb-5">
+            <button
+              onClick={() => setFiltersOpen((o) => !o)}
+              className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors mb-2"
+            >
+              <ChevronDown size={15} className={cn('transition-transform', filtersOpen && 'rotate-180')} />
+              Filtres
+              {activeFilterCount > 0 && (
+                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-tenir-500 text-white text-[10px] font-bold">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+            {filtersOpen && (
+              <div className="bg-white rounded-2xl border border-gray-100 p-4 grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div className="relative">
+                  <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  <input type="text" placeholder={commonT('search')} value={searchQuery}
+                    onChange={(e) => { setSearchQuery(e.target.value); setRcPage(0); }}
+                    className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-tenir-400/30 focus:border-tenir-400 bg-gray-50 focus:bg-white transition-all" />
+                </div>
+                <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setRcPage(0); }}
+                  className="px-3 py-2 text-sm border border-gray-200 rounded-xl bg-gray-50 text-gray-700 focus:outline-none focus:ring-2 focus:ring-tenir-400/30 focus:border-tenir-400">
+                  <option value="all">Tous les statuts</option>
+                  <option value="pending">{t('pending')}</option>
+                  <option value="verified">{t('verified')}</option>
+                  <option value="rejected">{t('rejected')}</option>
+                </select>
+                <input type="date" value={dateRange.start} onChange={(e) => { setDateRange({ ...dateRange, start: e.target.value }); setRcPage(0); }}
+                  className="px-3 py-2 text-sm border border-gray-200 rounded-xl bg-gray-50 text-gray-700 focus:outline-none focus:ring-2 focus:ring-tenir-400/30 focus:border-tenir-400" />
+                <input type="date" value={dateRange.end} onChange={(e) => { setDateRange({ ...dateRange, end: e.target.value }); setRcPage(0); }}
+                  className="px-3 py-2 text-sm border border-gray-200 rounded-xl bg-gray-50 text-gray-700 focus:outline-none focus:ring-2 focus:ring-tenir-400/30 focus:border-tenir-400" />
+              </div>
+            )}
           </div>
 
           {/* Grid */}
@@ -876,11 +899,20 @@ export default function ReceiptsPage() {
               {receipts.length === 0 && <p className="text-xs text-gray-400">Upload a receipt above to get started</p>}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filtered.map((r) => (
-                <ReceiptCard key={r.id} receipt={r} onDelete={handleDelete} onClick={setDetailReceipt} />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {pagedFiltered.map((r) => (
+                  <ReceiptCard key={r.id} receipt={r} onDelete={handleDelete} onClick={setDetailReceipt} />
+                ))}
+              </div>
+              <Pagination
+                page={rcPage}
+                pageSize={RC_PAGE_SIZE}
+                total={filtered.length}
+                onPageChange={setRcPage}
+                className="mt-4"
+              />
+            </>
           )}
         </div>
       </div>
