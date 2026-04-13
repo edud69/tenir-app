@@ -334,9 +334,19 @@ function InvestmentModal({ isOpen, onClose, onSubmit, initialData }: {
             <div className="grid grid-cols-2 gap-4">
               <Input label="Date d'achat" type="date" value={fd.purchase_date}
                 onChange={(e) => setFd({ ...fd, purchase_date: e.target.value })} />
-              <Input label="Notes" value={fd.notes}
-                onChange={(e) => setFd({ ...fd, notes: e.target.value })} />
+              <Select label="Compte" value={fd.account_type} onChange={(v) => setFd({ ...fd, account_type: v as string })}
+                options={[
+                  { value: '', label: 'Non spécifié' },
+                  { value: 'reer', label: 'REER' },
+                  { value: 'celi', label: 'CELI' },
+                  { value: 'reee', label: 'REEE' },
+                  { value: 'non_enregistre', label: 'Non enregistré' },
+                  { value: 'marge', label: 'Compte sur marge' },
+                  { value: 'autre', label: 'Autre' },
+                ]} />
             </div>
+            <Input label="Notes" value={fd.notes}
+              onChange={(e) => setFd({ ...fd, notes: e.target.value })} />
 
             {/* Live price preview */}
             {fd.current_price > 0 && fd.shares > 0 && (
@@ -737,6 +747,7 @@ export default function InvestmentsPage() {
   const [quotesLoading, setQuotesLoading] = useState(false);
   const [quotesError, setQuotesError] = useState<string | null>(null);
   const [quotesUpdatedAt, setQuotesUpdatedAt] = useState<Date | null>(null);
+  const [portfolioAccountFilter, setPortfolioAccountFilter] = useState<string>('all');
 
   // Real estate state
   const [properties, setProperties] = useState<RentalProperty[]>([]);
@@ -791,10 +802,28 @@ export default function InvestmentsPage() {
 
   // ── Portfolio metrics ──────────────────────────────────────────────────────
 
-  const portfolioBook   = investments.reduce((s, i) => s + i.shares * i.purchase_price, 0);
-  const portfolioMarket = investments.reduce((s, i) => s + i.shares * (i.current_price ?? i.purchase_price), 0);
+  const ACCOUNT_TYPE_LABELS: Record<string, string> = {
+    reer: 'REER', celi: 'CELI', reee: 'REEE',
+    non_enregistre: 'Non enregistré', marge: 'Marge', autre: 'Autre',
+  };
+
+  const portfolioAccountTypes = Array.from(
+    new Set(investments.map((i) => i.account_type || '').filter(Boolean))
+  );
+
+  const filteredInvestments = portfolioAccountFilter === 'all'
+    ? investments
+    : investments.filter((i) => (i.account_type || '') === portfolioAccountFilter);
+
+  const filteredInvestmentIds = new Set(filteredInvestments.map((i) => i.id));
+  const filteredDividends = portfolioAccountFilter === 'all'
+    ? dividends
+    : dividends.filter((d) => d.investment_id && filteredInvestmentIds.has(d.investment_id));
+
+  const portfolioBook   = filteredInvestments.reduce((s, i) => s + i.shares * i.purchase_price, 0);
+  const portfolioMarket = filteredInvestments.reduce((s, i) => s + i.shares * (i.current_price ?? i.purchase_price), 0);
   const unrealizedGain  = portfolioMarket - portfolioBook;
-  const ytdDividends    = dividends.reduce((s, d) => s + d.amount, 0);
+  const ytdDividends    = filteredDividends.reduce((s, d) => s + d.amount, 0);
 
   // ── Real estate metrics ────────────────────────────────────────────────────
 
@@ -1025,6 +1054,53 @@ export default function InvestmentsPage() {
           {/* ── Portfolio tab ── */}
           {mainTab === 'portfolio' && (
             <>
+              {/* Account filter pills */}
+              {(investments.length > 0 || portfolioAccountTypes.length > 0) && (
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 mb-6 scrollbar-hide">
+                  <button
+                    onClick={() => setPortfolioAccountFilter('all')}
+                    className={cn(
+                      'flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-medium whitespace-nowrap transition-all flex-shrink-0',
+                      portfolioAccountFilter === 'all'
+                        ? 'bg-tenir-500 text-white border-tenir-500 shadow-sm'
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-tenir-300 hover:text-tenir-600'
+                    )}
+                  >
+                    Tous les comptes
+                    <span className={cn('text-xs px-1.5 py-0.5 rounded-full font-semibold', portfolioAccountFilter === 'all' ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-500')}>
+                      {investments.length}
+                    </span>
+                  </button>
+
+                  {portfolioAccountTypes.map((acType) => {
+                    const isSelected = portfolioAccountFilter === acType;
+                    const count = investments.filter((i) => (i.account_type || '') === acType).length;
+                    return (
+                      <button
+                        key={acType}
+                        onClick={() => setPortfolioAccountFilter(isSelected ? 'all' : acType)}
+                        className={cn(
+                          'flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-medium whitespace-nowrap transition-all flex-shrink-0',
+                          isSelected
+                            ? 'bg-tenir-500 text-white border-tenir-500 shadow-sm'
+                            : 'bg-white text-gray-600 border-gray-200 hover:border-tenir-300 hover:text-tenir-600'
+                        )}
+                      >
+                        {ACCOUNT_TYPE_LABELS[acType] || acType.toUpperCase()}
+                        <span className={cn('text-xs px-1.5 py-0.5 rounded-full font-semibold', isSelected ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-500')}>
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+
+                  {/* If no account_type set on any investment, show a hint */}
+                  {portfolioAccountTypes.length === 0 && investments.length > 0 && (
+                    <span className="text-xs text-gray-400 italic">Assignez un compte à vos titres pour filtrer</span>
+                  )}
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 <PortfolioSummaryCard title={t('bookValue')} value={formatCurrency(portfolioBook)} subtitle="Coût de base rajusté" icon={DollarSign} />
                 <PortfolioSummaryCard title={t('marketValue')} value={formatCurrency(portfolioMarket)} subtitle="Valeur marchande actuelle" icon={TrendingUp} />
@@ -1071,7 +1147,7 @@ export default function InvestmentsPage() {
               <Card padding="none" shadow="sm" className="mb-8">
                 <CardHeader className="px-6 pt-6">
                   <div className="flex items-center justify-between">
-                    <CardTitle level="h3">Titres ({investments.length})</CardTitle>
+                    <CardTitle level="h3">Titres ({filteredInvestments.length}{portfolioAccountFilter !== 'all' ? ` / ${investments.length}` : ''})</CardTitle>
                     {Object.keys(quotes).length > 0 && (
                       <span className="text-xs text-gray-400 flex items-center gap-1">
                         <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse" />
@@ -1081,7 +1157,7 @@ export default function InvestmentsPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {investments.length === 0 ? (
+                  {filteredInvestments.length === 0 ? (
                     <div className="text-center py-12">
                       <p className="text-gray-500 mb-4">{commonT('noResults')}</p>
                       <Button variant="outline" icon={<Plus size={16} />} onClick={() => setIsInvModalOpen(true)}>{t('addInvestment')}</Button>
@@ -1103,7 +1179,7 @@ export default function InvestmentsPage() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {investments.map((inv) => {
+                          {filteredInvestments.map((inv) => {
                             const q = quotes[inv.symbol.toUpperCase()];
                             const livePrice  = q && !q.error ? q.price : (inv.current_price ?? inv.purchase_price);
                             const book       = inv.shares * inv.purchase_price;
@@ -1198,7 +1274,7 @@ export default function InvestmentsPage() {
                   <Table hoverable>
                     <TableHeader><TableRow isHeader><TableHead>Date</TableHead><TableHead>Payeur</TableHead><TableHead>Type</TableHead><TableHead align="right">Montant</TableHead></TableRow></TableHeader>
                     <TableBody>
-                      {dividends.length > 0 ? dividends.map((div) => (
+                      {filteredDividends.length > 0 ? filteredDividends.map((div) => (
                         <TableRow key={div.id}>
                           <TableCell>{formatDate(div.date)}</TableCell>
                           <TableCell>{div.payer || '—'}</TableCell>

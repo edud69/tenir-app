@@ -1667,71 +1667,80 @@ export default function ExpensesPage() {
             <SummaryCard title="Déductible" value={taxDeductible} isNegative subtitle="Pour déclaration fiscale" />
           </div>
 
-          {/* ── Accounts Section ────────────────────────────────────────────── */}
-          <div className="mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-semibold text-gray-900">{t('accounts')}</h2>
-              <Button
-                variant="outline"
-                size="sm"
-                icon={<Plus size={14} />}
-                onClick={() => { setEditAccount(null); setIsAccountModalOpen(true); }}
-              >
-                {t('addAccount')}
-              </Button>
-            </div>
-
+          {/* ── Account Tabs ────────────────────────────────────────────────── */}
+          <div className="mb-6">
             {accountsLoading ? (
-              <div className="flex items-center gap-2 text-sm text-gray-400 py-4">
-                <Loader2 size={16} className="animate-spin" /> Chargement des comptes…
-              </div>
-            ) : bankAccounts.length === 0 ? (
-              <div className="p-6 border-2 border-dashed border-gray-200 rounded-2xl text-center">
-                <Landmark size={28} className="text-gray-300 mx-auto mb-2" />
-                <p className="text-sm text-gray-500">{t('noAccounts')}</p>
+              <div className="flex items-center gap-2 text-sm text-gray-400 py-3">
+                <Loader2 size={15} className="animate-spin" /> Chargement des comptes…
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                {/* "Tous" pill */}
+                <button
+                  onClick={() => setAccountFilter('all')}
+                  className={cn(
+                    'flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-medium whitespace-nowrap transition-all flex-shrink-0',
+                    accountFilter === 'all'
+                      ? 'bg-tenir-500 text-white border-tenir-500 shadow-sm'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-tenir-300 hover:text-tenir-600'
+                  )}
+                >
+                  <Landmark size={14} />
+                  Tous les comptes
+                  <span className={cn('text-xs px-1.5 py-0.5 rounded-full font-semibold', accountFilter === 'all' ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-500')}>
+                    {transactions.length}
+                  </span>
+                </button>
+
+                {/* One pill per bank account */}
                 {bankAccounts.map((acc) => {
+                  const isSelected = accountFilter === acc.id;
+                  const txCount = transactions.filter((tx) => tx.account_id === acc.id).length;
                   const isCreditType = acc.type === 'credit_card' || acc.type === 'line_of_credit';
-                  const usage = isCreditType && acc.credit_limit ? (Math.abs(acc.current_balance) / acc.credit_limit) * 100 : 0;
                   return (
-                    <button
-                      key={acc.id}
-                      onClick={() => { setEditAccount(acc); setIsAccountModalOpen(true); }}
-                      className={cn(
-                        'text-left p-4 rounded-2xl border transition-all hover:shadow-md group',
-                        accountTypeColor[acc.type]
-                      )}
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-lg bg-white/60 flex items-center justify-center">
-                            <AccountIcon type={acc.type} size={16} />
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold leading-tight">{acc.name}</p>
-                            {acc.last_four && <p className="text-xs opacity-70">····{acc.last_four}</p>}
-                          </div>
+                    <div key={acc.id} className="relative group flex-shrink-0">
+                      <button
+                        onClick={() => setAccountFilter(isSelected ? 'all' : acc.id)}
+                        className={cn(
+                          'flex items-center gap-2 pl-3 pr-8 py-2.5 rounded-xl border text-sm font-medium whitespace-nowrap transition-all',
+                          isSelected
+                            ? cn(accountTypeColor[acc.type], 'shadow-sm')
+                            : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                        )}
+                      >
+                        <AccountIcon type={acc.type} size={14} />
+                        <div className="text-left leading-tight">
+                          <span className="block">{acc.name}</span>
+                          <span className={cn('block text-xs', isSelected ? 'opacity-70' : 'text-gray-400')}>
+                            {isCreditType && acc.credit_limit
+                              ? `${formatCurrency(Math.abs(acc.current_balance))} / ${formatCurrency(acc.credit_limit)}`
+                              : formatCurrency(acc.current_balance)}
+                          </span>
                         </div>
-                        <Edit2 size={12} className="opacity-0 group-hover:opacity-50 transition-opacity mt-1" />
-                      </div>
-                      <p className="text-lg font-bold">{formatCurrency(acc.current_balance)}</p>
-                      {acc.institution && <p className="text-xs opacity-60 mt-0.5">{acc.institution}</p>}
-                      {isCreditType && acc.credit_limit && (
-                        <div className="mt-2">
-                          <div className="w-full bg-black/10 rounded-full h-1.5">
-                            <div
-                              className="bg-current h-1.5 rounded-full transition-all"
-                              style={{ width: `${Math.min(usage, 100)}%` }}
-                            />
-                          </div>
-                          <p className="text-xs opacity-60 mt-1">Limite: {formatCurrency(acc.credit_limit)}</p>
-                        </div>
-                      )}
-                    </button>
+                        <span className={cn('text-xs px-1.5 py-0.5 rounded-full font-semibold ml-1', isSelected ? 'bg-black/10' : 'bg-gray-100 text-gray-400')}>
+                          {txCount}
+                        </span>
+                      </button>
+                      {/* Edit icon on hover */}
+                      <button
+                        title="Modifier le compte"
+                        onClick={(e) => { e.stopPropagation(); setEditAccount(acc); setIsAccountModalOpen(true); }}
+                        className="absolute right-1.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-60 p-1 rounded-md hover:opacity-100 hover:bg-black/10 transition-opacity"
+                      >
+                        <Edit2 size={11} />
+                      </button>
+                    </div>
                   );
                 })}
+
+                {/* Add account */}
+                <button
+                  onClick={() => { setEditAccount(null); setIsAccountModalOpen(true); }}
+                  className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-dashed border-gray-300 text-sm text-gray-400 hover:border-gray-400 hover:text-gray-600 whitespace-nowrap transition-all flex-shrink-0"
+                >
+                  <Plus size={14} />
+                  {t('addAccount')}
+                </button>
               </div>
             )}
           </div>
@@ -1742,7 +1751,7 @@ export default function ExpensesPage() {
               <CardTitle level="h3">Filtres</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 <Select
                   label={t('type')}
                   value={typeFilter}
@@ -1755,17 +1764,6 @@ export default function ExpensesPage() {
                   onChange={(value) => setCategoryFilter(String(value))}
                   options={[{ value: 'all', label: 'Toutes les catégories' }, ...categoryOptions]}
                 />
-                {bankAccounts.length > 0 && (
-                  <Select
-                    label={t('account')}
-                    value={accountFilter}
-                    onChange={(value) => setAccountFilter(String(value))}
-                    options={[
-                      { value: 'all', label: 'Tous les comptes' },
-                      ...bankAccounts.map((a) => ({ value: a.id, label: a.name })),
-                    ]}
-                  />
-                )}
                 <Input
                   label={t('startDate')}
                   type="date"
