@@ -16,7 +16,7 @@ import {
   Plus, Edit2, Trash2, ArrowUpRight, ArrowDownLeft, Paperclip, Upload,
   Link2, Unlink, FileText, ImageOff, Loader2, CheckCircle, X,
   CreditCard, Landmark, ArrowLeftRight, PiggyBank, Banknote,
-  AlertTriangle, FileSpreadsheet, FilePlus,
+  AlertTriangle, FileSpreadsheet, FilePlus, ChevronDown,
 } from 'lucide-react';
 import { useOrganization } from '@/hooks/useOrganization';
 import { createClient } from '@/lib/supabase/client';
@@ -1369,6 +1369,18 @@ export default function ExpensesPage() {
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [editAccount, setEditAccount] = useState<BankAccount | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [accountOverflowOpen, setAccountOverflowOpen] = useState(false);
+  const accountOverflowRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (accountOverflowRef.current && !accountOverflowRef.current.contains(e.target as Node)) {
+        setAccountOverflowOpen(false);
+      }
+    }
+    if (accountOverflowOpen) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [accountOverflowOpen]);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState<string>(() => searchParams.get('search') ?? '');
@@ -1668,82 +1680,138 @@ export default function ExpensesPage() {
           </div>
 
           {/* ── Account Tabs ────────────────────────────────────────────────── */}
-          <div className="mb-6">
-            {accountsLoading ? (
-              <div className="flex items-center gap-2 text-sm text-gray-400 py-3">
-                <Loader2 size={15} className="animate-spin" /> Chargement des comptes…
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                {/* "Tous" pill */}
-                <button
-                  onClick={() => setAccountFilter('all')}
-                  className={cn(
-                    'flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-medium whitespace-nowrap transition-all flex-shrink-0',
-                    accountFilter === 'all'
-                      ? 'bg-tenir-500 text-white border-tenir-500 shadow-sm'
-                      : 'bg-white text-gray-600 border-gray-200 hover:border-tenir-300 hover:text-tenir-600'
-                  )}
-                >
-                  <Landmark size={14} />
-                  Tous les comptes
-                  <span className={cn('text-xs px-1.5 py-0.5 rounded-full font-semibold', accountFilter === 'all' ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-500')}>
-                    {transactions.length}
-                  </span>
-                </button>
+          {(() => {
+            const VISIBLE = 3;
+            const visibleAccounts = bankAccounts.slice(0, VISIBLE);
+            const overflowAccounts = bankAccounts.slice(VISIBLE);
+            const overflowHasSelected = overflowAccounts.some((a) => a.id === accountFilter);
 
-                {/* One pill per bank account */}
-                {bankAccounts.map((acc) => {
-                  const isSelected = accountFilter === acc.id;
-                  const txCount = transactions.filter((tx) => tx.account_id === acc.id).length;
-                  const isCreditType = acc.type === 'credit_card' || acc.type === 'line_of_credit';
-                  return (
-                    <div key={acc.id} className="relative group flex-shrink-0">
-                      <button
-                        onClick={() => setAccountFilter(isSelected ? 'all' : acc.id)}
-                        className={cn(
-                          'flex items-center gap-2 pl-3 pr-8 py-2.5 rounded-xl border text-sm font-medium whitespace-nowrap transition-all',
-                          isSelected
-                            ? cn(accountTypeColor[acc.type], 'shadow-sm')
-                            : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
-                        )}
-                      >
-                        <AccountIcon type={acc.type} size={14} />
-                        <div className="text-left leading-tight">
-                          <span className="block">{acc.name}</span>
-                          <span className={cn('block text-xs', isSelected ? 'opacity-70' : 'text-gray-400')}>
-                            {isCreditType && acc.credit_limit
-                              ? `${formatCurrency(Math.abs(acc.current_balance))} / ${formatCurrency(acc.credit_limit)}`
-                              : formatCurrency(acc.current_balance)}
-                          </span>
-                        </div>
-                        <span className={cn('text-xs px-1.5 py-0.5 rounded-full font-semibold ml-1', isSelected ? 'bg-black/10' : 'bg-gray-100 text-gray-400')}>
-                          {txCount}
-                        </span>
-                      </button>
-                      {/* Edit icon on hover */}
-                      <button
-                        title="Modifier le compte"
-                        onClick={(e) => { e.stopPropagation(); setEditAccount(acc); setIsAccountModalOpen(true); }}
-                        className="absolute right-1.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-60 p-1 rounded-md hover:opacity-100 hover:bg-black/10 transition-opacity"
-                      >
-                        <Edit2 size={11} />
-                      </button>
+            function AccountPill({ acc, compact = false }: { acc: BankAccount; compact?: boolean }) {
+              const isSelected = accountFilter === acc.id;
+              const txCount = transactions.filter((tx) => tx.account_id === acc.id).length;
+              const isCreditType = acc.type === 'credit_card' || acc.type === 'line_of_credit';
+              return (
+                <div className="relative group">
+                  <button
+                    onClick={() => { setAccountFilter(isSelected ? 'all' : acc.id); setAccountOverflowOpen(false); }}
+                    className={cn(
+                      'flex items-center gap-2 py-2.5 rounded-xl border text-sm font-medium whitespace-nowrap transition-all',
+                      compact ? 'pl-3 pr-3 w-full' : 'pl-3 pr-8',
+                      isSelected
+                        ? cn(accountTypeColor[acc.type], 'shadow-sm')
+                        : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                    )}
+                  >
+                    <AccountIcon type={acc.type} size={14} />
+                    <div className="text-left leading-tight flex-1 min-w-0">
+                      <span className="block truncate">{acc.name}</span>
+                      <span className={cn('block text-xs', isSelected ? 'opacity-70' : 'text-gray-400')}>
+                        {isCreditType && acc.credit_limit
+                          ? `${formatCurrency(Math.abs(acc.current_balance))} / ${formatCurrency(acc.credit_limit)}`
+                          : formatCurrency(acc.current_balance)}
+                      </span>
                     </div>
-                  );
-                })}
+                    <span className={cn('text-xs px-1.5 py-0.5 rounded-full font-semibold ml-1 flex-shrink-0', isSelected ? 'bg-black/10' : 'bg-gray-100 text-gray-400')}>
+                      {txCount}
+                    </span>
+                  </button>
+                  {!compact && (
+                    <button
+                      title="Modifier le compte"
+                      onClick={(e) => { e.stopPropagation(); setEditAccount(acc); setIsAccountModalOpen(true); }}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-60 p-1 rounded-md hover:opacity-100 hover:bg-black/10 transition-opacity"
+                    >
+                      <Edit2 size={11} />
+                    </button>
+                  )}
+                </div>
+              );
+            }
 
-                {/* Add account */}
-                <button
-                  onClick={() => { setEditAccount(null); setIsAccountModalOpen(true); }}
-                  className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-dashed border-gray-300 text-sm text-gray-400 hover:border-gray-400 hover:text-gray-600 whitespace-nowrap transition-all flex-shrink-0"
-                >
-                  <Plus size={14} />
-                  {t('addAccount')}
-                </button>
+            return (
+              <div className="mb-6">
+                {accountsLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-400 py-3">
+                    <Loader2 size={15} className="animate-spin" /> Chargement des comptes…
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* "Tous" pill */}
+                    <button
+                      onClick={() => setAccountFilter('all')}
+                      className={cn(
+                        'flex items-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-medium whitespace-nowrap transition-all',
+                        accountFilter === 'all'
+                          ? 'bg-tenir-500 text-white border-tenir-500 shadow-sm'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-tenir-300 hover:text-tenir-600'
+                      )}
+                    >
+                      <Landmark size={14} />
+                      Tous
+                      <span className={cn('text-xs px-1.5 py-0.5 rounded-full font-semibold', accountFilter === 'all' ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-500')}>
+                        {transactions.length}
+                      </span>
+                    </button>
+
+                    {/* Visible account pills */}
+                    {visibleAccounts.map((acc) => <AccountPill key={acc.id} acc={acc} />)}
+
+                    {/* Overflow dropdown */}
+                    {overflowAccounts.length > 0 && (
+                      <div className="relative" ref={accountOverflowRef}>
+                        <button
+                          onClick={() => setAccountOverflowOpen((o) => !o)}
+                          className={cn(
+                            'flex items-center gap-1.5 px-3 py-2.5 rounded-xl border text-sm font-medium whitespace-nowrap transition-all',
+                            overflowHasSelected
+                              ? 'bg-tenir-500 text-white border-tenir-500 shadow-sm'
+                              : accountOverflowOpen
+                                ? 'bg-gray-100 text-gray-700 border-gray-300'
+                                : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                          )}
+                        >
+                          {overflowHasSelected ? (
+                            <>
+                              <AccountIcon type={bankAccounts.find((a) => a.id === accountFilter)?.type || 'checking'} size={14} />
+                              {bankAccounts.find((a) => a.id === accountFilter)?.name}
+                            </>
+                          ) : (
+                            <>+{overflowAccounts.length}</>
+                          )}
+                          <ChevronDown size={13} className={cn('transition-transform', accountOverflowOpen && 'rotate-180')} />
+                        </button>
+
+                        {accountOverflowOpen && (
+                          <div className="absolute top-full left-0 mt-1.5 z-20 bg-white rounded-xl border border-gray-200 shadow-lg p-1.5 min-w-56 space-y-0.5">
+                            {overflowAccounts.map((acc) => (
+                              <AccountPill key={acc.id} acc={acc} compact />
+                            ))}
+                            <div className="border-t border-gray-100 mt-1 pt-1">
+                              <button
+                                onClick={() => { setEditAccount(overflowAccounts.find((a) => a.id === accountFilter) || null); setIsAccountModalOpen(true); setAccountOverflowOpen(false); }}
+                                className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
+                              >
+                                <Edit2 size={11} /> Modifier le compte sélectionné
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Add account */}
+                    <button
+                      onClick={() => { setEditAccount(null); setIsAccountModalOpen(true); }}
+                      className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-dashed border-gray-300 text-sm text-gray-400 hover:border-gray-400 hover:text-gray-600 whitespace-nowrap transition-all"
+                    >
+                      <Plus size={14} />
+                      {t('addAccount')}
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            );
+          })()}
 
           {/* ── Filters ────────────────────────────────────────────────────── */}
           <Card padding="md" shadow="sm" className="mb-6">

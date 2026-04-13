@@ -748,6 +748,18 @@ export default function InvestmentsPage() {
   const [quotesError, setQuotesError] = useState<string | null>(null);
   const [quotesUpdatedAt, setQuotesUpdatedAt] = useState<Date | null>(null);
   const [portfolioAccountFilter, setPortfolioAccountFilter] = useState<string>('all');
+  const [portfolioOverflowOpen, setPortfolioOverflowOpen] = useState(false);
+  const portfolioOverflowRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (portfolioOverflowRef.current && !portfolioOverflowRef.current.contains(e.target as Node)) {
+        setPortfolioOverflowOpen(false);
+      }
+    }
+    if (portfolioOverflowOpen) document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [portfolioOverflowOpen]);
 
   // Real estate state
   const [properties, setProperties] = useState<RentalProperty[]>([]);
@@ -1055,51 +1067,100 @@ export default function InvestmentsPage() {
           {mainTab === 'portfolio' && (
             <>
               {/* Account filter pills */}
-              {(investments.length > 0 || portfolioAccountTypes.length > 0) && (
-                <div className="flex items-center gap-2 overflow-x-auto pb-1 mb-6 scrollbar-hide">
-                  <button
-                    onClick={() => setPortfolioAccountFilter('all')}
-                    className={cn(
-                      'flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-medium whitespace-nowrap transition-all flex-shrink-0',
-                      portfolioAccountFilter === 'all'
-                        ? 'bg-tenir-500 text-white border-tenir-500 shadow-sm'
-                        : 'bg-white text-gray-600 border-gray-200 hover:border-tenir-300 hover:text-tenir-600'
-                    )}
-                  >
-                    Tous les comptes
-                    <span className={cn('text-xs px-1.5 py-0.5 rounded-full font-semibold', portfolioAccountFilter === 'all' ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-500')}>
-                      {investments.length}
-                    </span>
-                  </button>
+              {(investments.length > 0 || portfolioAccountTypes.length > 0) && (() => {
+                const VISIBLE = 4;
+                const visibleTypes = portfolioAccountTypes.slice(0, VISIBLE);
+                const overflowTypes = portfolioAccountTypes.slice(VISIBLE);
+                const overflowHasSelected = overflowTypes.includes(portfolioAccountFilter);
 
-                  {portfolioAccountTypes.map((acType) => {
-                    const isSelected = portfolioAccountFilter === acType;
-                    const count = investments.filter((i) => (i.account_type || '') === acType).length;
-                    return (
-                      <button
-                        key={acType}
-                        onClick={() => setPortfolioAccountFilter(isSelected ? 'all' : acType)}
-                        className={cn(
-                          'flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-medium whitespace-nowrap transition-all flex-shrink-0',
-                          isSelected
-                            ? 'bg-tenir-500 text-white border-tenir-500 shadow-sm'
-                            : 'bg-white text-gray-600 border-gray-200 hover:border-tenir-300 hover:text-tenir-600'
+                return (
+                  <div className="flex items-center gap-2 flex-wrap mb-6">
+                    <button
+                      onClick={() => setPortfolioAccountFilter('all')}
+                      className={cn(
+                        'flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-medium whitespace-nowrap transition-all',
+                        portfolioAccountFilter === 'all'
+                          ? 'bg-tenir-500 text-white border-tenir-500 shadow-sm'
+                          : 'bg-white text-gray-600 border-gray-200 hover:border-tenir-300 hover:text-tenir-600'
+                      )}
+                    >
+                      Tous
+                      <span className={cn('text-xs px-1.5 py-0.5 rounded-full font-semibold', portfolioAccountFilter === 'all' ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-500')}>
+                        {investments.length}
+                      </span>
+                    </button>
+
+                    {visibleTypes.map((acType) => {
+                      const isSelected = portfolioAccountFilter === acType;
+                      const count = investments.filter((i) => (i.account_type || '') === acType).length;
+                      return (
+                        <button
+                          key={acType}
+                          onClick={() => setPortfolioAccountFilter(isSelected ? 'all' : acType)}
+                          className={cn(
+                            'flex items-center gap-2 px-4 py-2 rounded-xl border text-sm font-medium whitespace-nowrap transition-all',
+                            isSelected
+                              ? 'bg-tenir-500 text-white border-tenir-500 shadow-sm'
+                              : 'bg-white text-gray-600 border-gray-200 hover:border-tenir-300 hover:text-tenir-600'
+                          )}
+                        >
+                          {ACCOUNT_TYPE_LABELS[acType] || acType.toUpperCase()}
+                          <span className={cn('text-xs px-1.5 py-0.5 rounded-full font-semibold', isSelected ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-500')}>
+                            {count}
+                          </span>
+                        </button>
+                      );
+                    })}
+
+                    {overflowTypes.length > 0 && (
+                      <div className="relative" ref={portfolioOverflowRef}>
+                        <button
+                          onClick={() => setPortfolioOverflowOpen((o) => !o)}
+                          className={cn(
+                            'flex items-center gap-1.5 px-3 py-2 rounded-xl border text-sm font-medium whitespace-nowrap transition-all',
+                            overflowHasSelected
+                              ? 'bg-tenir-500 text-white border-tenir-500 shadow-sm'
+                              : portfolioOverflowOpen
+                                ? 'bg-gray-100 text-gray-700 border-gray-300'
+                                : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                          )}
+                        >
+                          {overflowHasSelected
+                            ? (ACCOUNT_TYPE_LABELS[portfolioAccountFilter] || portfolioAccountFilter.toUpperCase())
+                            : `+${overflowTypes.length}`}
+                          <ChevronDown size={13} className={cn('transition-transform', portfolioOverflowOpen && 'rotate-180')} />
+                        </button>
+
+                        {portfolioOverflowOpen && (
+                          <div className="absolute top-full left-0 mt-1.5 z-20 bg-white rounded-xl border border-gray-200 shadow-lg p-1.5 min-w-44 space-y-0.5">
+                            {overflowTypes.map((acType) => {
+                              const isSelected = portfolioAccountFilter === acType;
+                              const count = investments.filter((i) => (i.account_type || '') === acType).length;
+                              return (
+                                <button
+                                  key={acType}
+                                  onClick={() => { setPortfolioAccountFilter(isSelected ? 'all' : acType); setPortfolioOverflowOpen(false); }}
+                                  className={cn(
+                                    'flex items-center justify-between w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                                    isSelected ? 'bg-tenir-50 text-tenir-700' : 'text-gray-700 hover:bg-gray-50'
+                                  )}
+                                >
+                                  {ACCOUNT_TYPE_LABELS[acType] || acType.toUpperCase()}
+                                  <span className="text-xs px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-400 font-semibold">{count}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
                         )}
-                      >
-                        {ACCOUNT_TYPE_LABELS[acType] || acType.toUpperCase()}
-                        <span className={cn('text-xs px-1.5 py-0.5 rounded-full font-semibold', isSelected ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-500')}>
-                          {count}
-                        </span>
-                      </button>
-                    );
-                  })}
+                      </div>
+                    )}
 
-                  {/* If no account_type set on any investment, show a hint */}
-                  {portfolioAccountTypes.length === 0 && investments.length > 0 && (
-                    <span className="text-xs text-gray-400 italic">Assignez un compte à vos titres pour filtrer</span>
-                  )}
-                </div>
-              )}
+                    {portfolioAccountTypes.length === 0 && investments.length > 0 && (
+                      <span className="text-xs text-gray-400 italic">Assignez un compte à vos titres pour filtrer</span>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 <PortfolioSummaryCard title={t('bookValue')} value={formatCurrency(portfolioBook)} subtitle="Coût de base rajusté" icon={DollarSign} />
